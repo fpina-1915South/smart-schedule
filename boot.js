@@ -22,20 +22,41 @@
 
   /* ---------- sign in with a one-time email link ---------- */
   function showSignIn(msg, err){
-    gate(`<p>Sign in with your work email. We'll send you a one-time link. No password needed.</p>
-      <form id="siForm"><input type="email" id="siEmail" required autocomplete="email" placeholder="you@${esc(DOMAIN || "company.com")}">
-      <button class="btn" type="submit">Email me a sign-in link</button></form>
-      <div class="gmsg ${err ? "err" : ""}" id="siMsg">${esc(msg || "")}</div>`);
+    gate(`<p>Sign in with your work email and the password Frank gave you.</p>
+      <form id="siForm">
+        <input type="email" id="siEmail" required autocomplete="username" placeholder="you@${esc(DOMAIN || "company.com")}">
+        <input type="password" id="siPass" required autocomplete="current-password" placeholder="Password" style="margin-top:8px">
+        <button class="btn" type="submit">Sign in</button>
+      </form>
+      <div class="gmsg ${err ? "err" : ""}" id="siMsg">${esc(msg || "")}</div>
+      <p class="note" style="margin-top:14px">Forgot your password? Ask Frank Pina to reset it. <a href="#" id="siLink">Email me a sign-in link instead</a></p>`);
     $("siForm").addEventListener("submit", async e => {
       e.preventDefault();
-      const email = $("siEmail").value.trim().toLowerCase();
+      const email = $("siEmail").value.trim().toLowerCase(), pass = $("siPass").value;
       if (DOMAIN && !email.endsWith("@" + DOMAIN)){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Use your @" + DOMAIN + " email."; return; }
-      $("siMsg").className = "gmsg"; $("siMsg").textContent = "Sending...";
+      $("siMsg").className = "gmsg"; $("siMsg").textContent = "Signing in...";
+      try { await auth.signInWithEmailAndPassword(email, pass); }
+      catch(err2){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = /password|credential|user-not-found|invalid/i.test(err2 && err2.code || "") ? "That email and password don't match. Check with Frank if you need it reset." : "Couldn't sign in: " + (err2 && err2.message || err2); }
+    });
+    $("siLink").addEventListener("click", e => { e.preventDefault(); showLinkSignIn(); });
+  }
+  function showLinkSignIn(msg, err){
+    gate(`<p>We'll email you a one-time sign-in link. Use this only if you don't have a password.</p>
+      <form id="lnForm"><input type="email" id="lnEmail" required autocomplete="email" placeholder="you@${esc(DOMAIN || "company.com")}">
+      <button class="btn" type="submit">Email me a sign-in link</button></form>
+      <div class="gmsg ${err ? "err" : ""}" id="lnMsg">${esc(msg || "")}</div>
+      <p class="note" style="margin-top:14px"><a href="#" id="lnBack">Back to password sign-in</a></p>`);
+    $("lnBack").addEventListener("click", e => { e.preventDefault(); showSignIn(); });
+    $("lnForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const email = $("lnEmail").value.trim().toLowerCase();
+      if (DOMAIN && !email.endsWith("@" + DOMAIN)){ $("lnMsg").className = "gmsg err"; $("lnMsg").textContent = "Use your @" + DOMAIN + " email."; return; }
+      $("lnMsg").className = "gmsg"; $("lnMsg").textContent = "Sending...";
       try {
         await auth.sendSignInLinkToEmail(email, {url: location.origin + location.pathname, handleCodeInApp: true});
         try { localStorage.setItem(EMAIL_KEY, email); } catch(e2) {}
-        gate(`<p><b>Check your email.</b> We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device and you're in.</p><p class="note">It can take a minute. Check junk mail if it doesn't show up.</p>`);
-      } catch(err2){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Couldn't send the link: " + (err2 && err2.message || err2); }
+        gate(`<p><b>Check your email.</b> We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device and you're in.</p>`);
+      } catch(err2){ $("lnMsg").className = "gmsg err"; $("lnMsg").textContent = "Couldn't send the link: " + (err2 && err2.message || err2); }
     });
   }
 
@@ -169,6 +190,13 @@
     $("gate").hidden = true; $("appRoot").hidden = false; $("acctbar").hidden = false;
     wireAccess();
     $("acctOut").onclick = () => auth.signOut().then(() => location.reload());
+    $("acctPass").onclick = async () => {
+      const p1 = prompt("New password (at least 8 characters):"); if (!p1) return;
+      if (p1.length < 8){ alert("Use at least 8 characters."); return; }
+      const p2 = prompt("Type the new password again:"); if (p1 !== p2){ alert("Those didn't match. Nothing changed."); return; }
+      try { await auth.currentUser.updatePassword(p1); alert("Password changed."); }
+      catch(e){ alert(/recent/i.test(e.code || "") ? "For security, sign out and sign back in, then change your password right away." : "Couldn't change it: " + e.message); }
+    };
     const sc = document.createElement("script"); sc.src = "app.js?v=" + (C.version || "1"); document.body.appendChild(sc);
   }
 
