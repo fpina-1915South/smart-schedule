@@ -120,7 +120,9 @@
   }
 
   /* ---------- owner: access dialog ---------- */
+  const CREATE_HTML = "    <hr style=\"border:0;border-top:1px solid var(--line);margin:18px 0 6px\">\n    <h2>Create logins</h2>\n    <p class=\"note\" style=\"margin:0\">Paste leader emails, one per line. Each gets a login with a starting password, and they're asked to set their own the first time they sign in. No emails are sent. <b>Before you click Create, turn on \"Enable create (sign-up)\" in Firebase. Turn it back off when you're done.</b></p>\n    <label for=\"newEmails\">Leader emails</label>\n    <textarea id=\"newEmails\" placeholder=\"gm.batonrouge@1915south.com\"></textarea>\n    <label><input type=\"checkbox\" id=\"newShared\"> Use the same starting password for everyone</label>\n    <input id=\"newSharedPw\" type=\"text\" placeholder=\"Starting password (8+ characters)\" hidden style=\"width:100%;font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;box-sizing:border-box\">\n    <div class=\"row\"><button class=\"btn\" id=\"newCreate\">Create logins</button></div>\n    <div id=\"newOut\" class=\"note\"></div>";
   function wireAccess(){
+    if (!$("newEmails")){ const row = $("accSave").parentNode; row.insertAdjacentHTML("afterend", CREATE_HTML); }
     document.querySelectorAll(".accDomain").forEach(el => el.textContent = DOMAIN);
     $("acctAccess").hidden = !ROLE.owner;
     $("acctAccess").onclick = () => {
@@ -131,12 +133,65 @@
       $("accessDlg").showModal();
     };
     $("accCancel").onclick = () => $("accessDlg").close();
+    $("newShared").onchange = () => { $("newSharedPw").hidden = !$("newShared").checked; };
+    $("newCreate").onclick = createLogins;
     $("accSave").onclick = async () => {
       const list = t => [...new Set(t.split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(x => x.includes("@")))];
       const body = {allowDomain:$("accAll").checked, leaders:list($("accLeaders").value), admins:list($("accAdmins").value), updatedAt:new Date().toISOString()};
       try { await fs.doc("config/access").set(body); ACCESS = body; $("accessDlg").close(); }
       catch(e){ alert("Couldn't save: " + e.message); }
     };
+  }
+
+  /* ---------- owner: create leader logins in bulk (no emails sent) ---------- */
+  const genPw = () => { const w = ["Blue","Navy","Sage","Clay","Dune","Oak","Pine","Bay","Gulf","Delta"], a = new Uint32Array(3); crypto.getRandomValues(a);
+    return w[a[0] % w.length] + "-" + String(1000 + a[1] % 9000) + "-" + w[a[2] % w.length]; };
+  async function createLogins(){
+    const out = $("newOut");
+    const emails = [...new Set($("newEmails").value.split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(x => x.includes("@")))];
+    if (!emails.length){ out.textContent = "Paste at least one email."; return; }
+    const bad = emails.filter(e => DOMAIN && !e.endsWith("@" + DOMAIN)); if (bad.length){ out.textContent = "These aren't @" + DOMAIN + ": " + bad.join(", "); return; }
+    const shared = $("newShared").checked ? $("newSharedPw").value : "";
+    if ($("newShared").checked && shared.length < 8){ out.textContent = "The starting password needs 8+ characters."; return; }
+    const app2 = firebase.apps.find(a => a.name === "creator") || firebase.initializeApp(C.firebase, "creator");
+    const a2 = app2.auth(); const rows = []; out.textContent = "Creating...";
+    for (const e of emails){
+      const pw = shared || genPw();
+      try {
+        const cred = await a2.createUserWithEmailAndPassword(e, pw);
+        await fs.doc("users/" + cred.user.uid).set({email:e, name:e.split("@")[0], mustChange:true, createdAt:new Date().toISOString()});
+        await a2.signOut();
+        rows.push([e, pw, "Created"]);
+      } catch(err){
+        const c = err && err.code || "";
+        rows.push([e, "", c.includes("email-already-in-use") ? "Already has a login" : c.includes("admin-restricted") || c.includes("operation-not-allowed") ? "Blocked: turn on sign-up in Firebase first" : "Error: " + (err.message || c)]);
+      }
+    }
+    try { const a = ACCESS || {}; const leaders = [...new Set((a.leaders || []).concat(rows.filter(r => r[2] === "Created").map(r => r[0])))]; ACCESS = Object.assign({}, a, {leaders, updatedAt:new Date().toISOString()}); await fs.doc("config/access").set(ACCESS); } catch(e) {}
+    const made = rows.filter(r => r[2] === "Created");
+    const text = made.map(r => `${r[0]}  password: ${r[1]}`).join("\n");
+    out.innerHTML = `<p><b>${made.length} created</b>${rows.length > made.length ? `, ${rows.length - made.length} skipped` : ""}. Copy this list now. Passwords aren't shown again.</p>
+      <table style="width:100%;font-size:12.5px;border-collapse:collapse">${rows.map(r => `<tr><td style="padding:3px 6px;border-top:1px solid var(--line)">${esc(r[0])}</td><td style="padding:3px 6px;border-top:1px solid var(--line);font-family:monospace">${esc(r[1])}</td><td style="padding:3px 6px;border-top:1px solid var(--line)">${esc(r[2])}</td></tr>`).join("")}</table>
+      ${made.length ? `<div class="row" style="justify-content:flex-start"><button class="btn ghost" id="newCopy">Copy list</button></div>` : ""}
+      <p><b>Now turn "Enable create (sign-up)" back off in Firebase.</b></p>`;
+    const cb = $("newCopy"); if (cb) cb.onclick = () => navigator.clipboard.writeText(text).then(() => { cb.textContent = "Copied"; });
+  }
+
+  /* ---------- first sign-in: set your own password ---------- */
+  function forcePassword(u){
+    return new Promise(done => {
+      gate(`<p><b>Welcome, ${esc(u.email)}.</b> Set your own password to finish signing in.</p>
+        <form id="fpForm"><input type="password" id="fp1" required autocomplete="new-password" placeholder="New password (8+ characters)">
+        <input type="password" id="fp2" required autocomplete="new-password" placeholder="Type it again" style="margin-top:8px">
+        <button class="btn" type="submit">Save password</button></form><div class="gmsg" id="fpMsg"></div>`);
+      $("fpForm").addEventListener("submit", async e => {
+        e.preventDefault(); const p1 = $("fp1").value, p2 = $("fp2").value, m = $("fpMsg");
+        if (p1.length < 8){ m.className = "gmsg err"; m.textContent = "Use at least 8 characters."; return; }
+        if (p1 !== p2){ m.className = "gmsg err"; m.textContent = "Those don't match."; return; }
+        try { await u.updatePassword(p1); await fs.doc("users/" + u.uid).set({mustChange:false}, {merge:true}); done(); }
+        catch(err){ m.className = "gmsg err"; m.textContent = "Couldn't save it: " + (err.message || err); }
+      });
+    });
   }
 
   /* ---------- owner: one-time load of the starting data ---------- */
@@ -167,7 +222,8 @@
   async function start(u){
     if (started) return; started = true;
     $("acctWho").textContent = "Signed in as " + u.email;
-    try { await fs.doc("users/" + u.uid).set({email:u.email, name:(u.email || "").split("@")[0], lastSeen:new Date().toISOString()}); } catch(e) {}
+    try { const us = await fs.doc("users/" + u.uid).get(); if (us.exists && us.data().mustChange) await forcePassword(u); } catch(e) {}
+    try { await fs.doc("users/" + u.uid).set({email:u.email, name:(u.email || "").split("@")[0], lastSeen:new Date().toISOString()}, {merge:true}); } catch(e) {}
     try { const s = await fs.doc("config/access").get(); ACCESS = s.exists ? s.data() : null; } catch(e){ ACCESS = null; }
     ROLE = roleFor(u.email);
     if (ROLE.owner && !ACCESS){ ACCESS = {allowDomain:true, leaders:[], admins:[], updatedAt:new Date().toISOString()}; try { await fs.doc("config/access").set(ACCESS); } catch(e) {} }
