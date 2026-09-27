@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>1915 South Smart Scheduler</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#003B4A; --blue:#3F738D; --icy:#DBECF1; --orange:#F68C2C; --clay:#802020; --sage:#91996B;
+  --bg:#F6F8F9; --surface:#FFFFFF; --surface2:#EDF1F3; --line:#D6DEE2; --ink:#20343B; --text:#595959; --muted:#7C8B91;
+  --hot:#F68C2C; --hot-ink:#FFFFFF; --warm:#FDE3CC; --warm-ink:#7A4A12; --base:#FFFFFF; --base-ink:#46555A;
+  --closed:#D9DEE0; --short:#B3413F; --short-bg:#F6DEDC; --ok:#5E6B2F; --ok-bg:#E7EAD6; --heavy:#3F738D; --heavy-bg:#DCE9EF;
+  --band:#003B4A; --band-ink:#FFFFFF; --band-sub:#DBECF1;
+  --r:6px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0E1A1F; --surface:#15252B; --surface2:#1C3037; --line:#2B434B; --ink:#E6EEF1; --text:#B8C6CB; --muted:#8FA2A8;
+    --hot:#F68C2C; --hot-ink:#1A1206; --warm:#5A3A1C; --warm-ink:#FCD9B4; --base:#15252B; --base-ink:#B8C6CB;
+    --closed:#223338; --short:#E0716E; --short-bg:#4A2322; --ok:#C3CB95; --ok-bg:#2F3520; --heavy:#8DB9CE; --heavy-bg:#1E3844;
+    --band:#062C36; --band-sub:#9FC4D2; --icy:#1E3844;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0E1A1F; --surface:#15252B; --surface2:#1C3037; --line:#2B434B; --ink:#E6EEF1; --text:#B8C6CB; --muted:#8FA2A8;
+  --hot:#F68C2C; --hot-ink:#1A1206; --warm:#5A3A1C; --warm-ink:#FCD9B4; --base:#15252B; --base-ink:#B8C6CB;
+  --closed:#223338; --short:#E0716E; --short-bg:#4A2322; --ok:#C3CB95; --ok-bg:#2F3520; --heavy:#8DB9CE; --heavy-bg:#1E3844;
+  --band:#062C36; --band-sub:#9FC4D2; --icy:#1E3844;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:Aptos,Inter,"Segoe UI",Roboto,Arial,sans-serif;font-size:14px;line-height:1.45;margin:0}
+.band{background:var(--band);color:var(--band-ink);border-bottom:4px solid var(--orange)}
+.band-in{max-width:1180px;margin:0 auto;padding:22px 16px 18px;display:flex;flex-wrap:wrap;gap:16px 28px;align-items:flex-end;justify-content:space-between}
+.eyebrow{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--band-sub);font-weight:700}
+h1{font-size:28px;line-height:1.1;margin:4px 0 4px;font-weight:800;text-wrap:balance}
+.band p{margin:0;color:var(--band-sub);font-size:13px;max-width:60ch}
+.picker{display:flex;flex-direction:column;gap:6px;min-width:220px}
+.picker label{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--band-sub);font-weight:700}
+select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:7px 9px}
+.picker select{font-size:16px;font-weight:700;padding:9px 11px}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+main{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:18px 48px;display:flex;flex-direction:column;gap:22px}
+section{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+h2{font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--navy);margin:0 0 4px;font-weight:800}
+:root[data-theme="dark"] h2{color:var(--band-sub)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) h2{color:var(--band-sub)}}
+.lede{margin:0 0 14px;color:var(--text);max-width:75ch}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--surface2);color:var(--ink)}
+.pill.shape-morning{background:var(--warm);color:var(--warm-ink)}
+.pill.shape-evening{background:var(--heavy-bg);color:var(--heavy)}
+.pill.shape-both{background:var(--ok-bg);color:var(--ok)}
+.hours{display:flex;flex-wrap:wrap;gap:8px}
+.hours span{background:var(--surface2);border-radius:var(--r);padding:5px 9px;font-size:12.5px;color:var(--ink)}
+.hours b{color:var(--muted);font-weight:600;margin-right:4px}
+.overview{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;margin-top:14px}
+@media (max-width:860px){.overview{grid-template-columns:1fr}}
+.scroll{overflow-x:auto}
+table{border-collapse:separate;border-spacing:3px;font-variant-numeric:tabular-nums;width:100%}
+th{font-size:12px;color:var(--muted);font-weight:700;padding:4px 2px}
+.wk th.day{cursor:pointer;color:var(--ink);background:var(--surface2);border-radius:5px}
+.wk th.day.sel{background:var(--navy);color:#fff}
+.wk td{text-align:center;font-size:13px;padding:6px 2px;border-radius:5px;min-width:44px}
+td.hr{color:var(--muted);text-align:right;padding-right:8px;font-size:12px;white-space:nowrap;min-width:52px}
+.t-hot{background:var(--hot);color:var(--hot-ink);font-weight:800}
+.t-warm{background:var(--warm);color:var(--warm-ink);font-weight:700}
+.t-base{background:var(--base);color:var(--base-ink);box-shadow:inset 0 0 0 1px var(--line)}
+.t-new{background:repeating-linear-gradient(45deg,var(--surface),var(--surface) 4px,var(--surface2) 4px,var(--surface2) 8px);color:var(--blue);font-style:italic;font-size:11px!important}
+.t-closed{background:var(--closed)}
+.tot td{font-weight:800;color:var(--ink);background:var(--surface2);font-size:12.5px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.seg button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:var(--surface);color:var(--text);padding:6px 11px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--navy);color:#fff}
+.legend{display:flex;flex-direction:column;gap:9px}
+.lg{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;font-size:13px}
+.sw{height:20px;border-radius:4px}
+.lg b{color:var(--ink)}
+.shapes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:6px}
+@media (max-width:760px){.shapes{grid-template-columns:1fr}}
+.shape{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--surface)}
+.shape.me{border:2px solid var(--orange);background:var(--surface2)}
+.shape h3{margin:0 0 4px;font-size:14px;color:var(--ink)}
+.shape p{margin:0;font-size:13px}
+.shape .who{font-size:12px;color:var(--muted);margin-top:6px}
+.bars{display:flex;align-items:flex-end;gap:3px;height:34px;margin:8px 0 6px}
+.bars i{flex:1;border-radius:2px 2px 0 0;background:var(--blue);opacity:.75}
+.days{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}
+.days button{font:inherit;font-weight:700;font-size:13px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--r);padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:7px}
+.days button[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--closed)}
+.dot.ok{background:var(--ok)} .dot.short{background:var(--short)} .dot.heavy{background:var(--heavy)}
+.planner{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px}
+@media (max-width:980px){.planner{grid-template-columns:1fr}}
+.tl td{padding:0;height:30px;text-align:center;font-size:12.5px;border-radius:4px;min-width:40px}
+.tl .who{text-align:left;padding:0 6px;white-space:nowrap;min-width:150px;font-size:13px;color:var(--ink)}
+.tl .who small{color:var(--muted);font-weight:600;font-size:11px;margin-left:4px}
+.tl .on-c{background:var(--blue);color:#fff}
+.tl .on-l{background:var(--navy);color:#fff;box-shadow:inset 0 0 0 2px var(--orange)}
+.tl .off{background:var(--surface2)}
+.tl .outside{background:transparent}
+.tl .lab{text-align:left;font-weight:700;color:var(--ink);padding:0 6px;font-size:12px;white-space:nowrap}
+.c-short{background:var(--short-bg);color:var(--short);font-weight:800}
+.c-ok{background:var(--ok-bg);color:var(--ok);font-weight:800}
+.c-heavy{background:var(--heavy-bg);color:var(--heavy);font-weight:800}
+.sep td{height:8px}
+.shiftlist{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.shift{display:grid;grid-template-columns:minmax(110px,1.4fr) 118px 92px 92px 34px;gap:6px;align-items:center}
+@media (max-width:560px){.shift{grid-template-columns:1fr 1fr;}}
+.shift input,.shift select{width:100%;padding:6px 7px;font-size:13px}
+.icon-btn{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:var(--r);height:32px;cursor:pointer}
+.icon-btn:hover{color:var(--short);border-color:var(--short)}
+.btn{font:inherit;font-weight:700;font-size:13px;border-radius:var(--r);padding:8px 13px;cursor:pointer;border:1px solid var(--navy);background:var(--navy);color:#fff}
+.btn.ghost{background:var(--surface);color:var(--navy);border-color:var(--line)}
+:root[data-theme="dark"] .btn.ghost{color:var(--ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.ghost{color:var(--ink)}}
+.btn.orange{background:var(--orange);border-color:var(--orange);color:#1A1206}
+.coach{background:var(--surface2);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;align-self:start}
+.coach h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink)}
+.tip{font-size:13px;border-left:4px solid var(--line);padding:2px 0 2px 10px;color:var(--ink)}
+.tip.short{border-color:var(--short)} .tip.heavy{border-color:var(--heavy)} .tip.ok{border-color:var(--ok)} .tip.info{border-color:var(--orange)}
+.tip span{display:block;color:var(--text);font-size:12.5px;margin-top:2px}
+.score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.score div{background:var(--surface);border-radius:6px;padding:8px;text-align:center}
+.score b{display:block;font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+.score small{font-size:11px;color:var(--muted)}
+.settings{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end;margin-top:4px}
+.settings label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--ink)}
+.settings input{width:96px}
+.settings small{font-weight:400;color:var(--muted);max-width:38ch}
+.note{font-size:12px;color:var(--muted)}
+.example{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;background:var(--warm);color:var(--warm-ink);padding:3px 8px;border-radius:4px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:8px;font-size:13px;font-weight:600}
+textarea{width:100%;min-height:120px;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:860px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.steps{grid-template-columns:1fr}}
+.step{background:var(--surface2);border-radius:8px;padding:12px}
+.step b{display:block;color:var(--ink);margin-bottom:3px}
+.step .n{display:inline-block;background:var(--orange);color:#1A1206;font-weight:800;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;font-size:12px;margin-bottom:6px}
+@media (prefers-reduced-motion:no-preference){.days button,.seg button,.btn{transition:background .15s,color .15s}}
+</style>
+<style>
+.menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.mcard{background:var(--surface2);border-radius:8px;padding:10px 12px}
+.mcard h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)}
+.mrow{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0;color:var(--ink)}
+.mrow small{color:var(--muted)}
+.tag{display:inline-block;font-size:11px;font-weight:800;border-radius:4px;padding:2px 7px;letter-spacing:.3px}
+.tag.O{background:#DCE9EF;color:#2C5A70} .tag.M{background:#FDE3CC;color:#7A4A12} .tag.C{background:#E7EAD6;color:#4E5A22} .tag.S{background:#E9E0F0;color:#5A3E73}
+:root[data-theme="dark"] .tag.O{background:#1E3844;color:#8DB9CE} :root[data-theme="dark"] .tag.M{background:#5A3A1C;color:#FCD9B4} :root[data-theme="dark"] .tag.C{background:#2F3520;color:#C3CB95} :root[data-theme="dark"] .tag.S{background:#3A2C47;color:#D7C2EA}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tag.O{background:#1E3844;color:#8DB9CE} :root:not([data-theme="light"]) .tag.M{background:#5A3A1C;color:#FCD9B4} :root:not([data-theme="light"]) .tag.C{background:#2F3520;color:#C3CB95} :root:not([data-theme="light"]) .tag.S{background:#3A2C47;color:#D7C2EA}}
+.roster{border-spacing:3px}
+.roster th{font-size:12px;color:var(--muted);text-align:center}
+.roster td{padding:0}
+.roster td.nm{min-width:170px}
+.roster td.nm input{width:100%;font-size:13px;padding:6px 7px}
+.roster td.rl select{font-size:12.5px;padding:6px 5px;min-width:150px}
+.roster td.dy select{width:100%;min-width:84px;font-size:12.5px;padding:6px 4px;font-weight:700;border-width:2px}
+.roster td.dy select.k-{color:var(--muted);font-weight:500;background:var(--surface)}
+.roster td.dy select.k-O{background:#DCE9EF;color:#2C5A70;border-color:#B9D2DE}
+.roster td.dy select.k-M{background:#FDE3CC;color:#7A4A12;border-color:#F4C79C}
+.roster td.dy select.k-C{background:#E7EAD6;color:#4E5A22;border-color:#CBD1A9}
+.roster td.dy select.k-S,.roster td.dy select.k-S2{background:#E9E0F0;color:#5A3E73;border-color:#D2C1E0}
+.roster td.hrs{text-align:center;font-weight:800;font-size:14px;border-radius:6px;min-width:74px;padding:6px 4px;font-variant-numeric:tabular-nums}
+.roster td.hrs small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.3px}
+.h-ok{background:var(--ok-bg);color:var(--ok)} .h-under{background:var(--short-bg);color:var(--short)} .h-over{background:var(--short-bg);color:var(--short)} .h-na{background:var(--surface2);color:var(--ink)}
+.roster tr.grp td{padding:10px 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:800}
+.roster tfoot td{font-size:12px;text-align:center;color:var(--ink);font-weight:700;padding:5px 2px;background:var(--surface2);border-radius:5px}
+.cov td{text-align:center;font-size:12.5px;padding:5px 2px;border-radius:4px;min-width:58px;font-variant-numeric:tabular-nums}
+.cov td small{font-weight:600;opacity:.8}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{background:var(--surface2);border-radius:8px;padding:8px 12px;min-width:120px}
+.chip b{display:block;font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+.chip small{font-size:11.5px;color:var(--muted)}
+</style>
+<style>.roster td.nm input{border-style:dashed} .roster td.nm input:hover{border-color:var(--orange)}</style>
+<style>
+.teambox{background:var(--surface2);border-radius:8px;padding:14px;margin:6px 0 14px}
+.teambox h3{margin:0 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink)}
+.teambox .settings input{width:88px;font-size:16px;font-weight:700}
+.teambox .settings input::placeholder{color:var(--muted);font-weight:500}
+.tip.shortmsg{border-color:var(--short)} .tip.okmsg{border-color:var(--ok)}
+</style>
+<style>
+.roster tr.mirror td{opacity:.95}
+.mname{border:1px solid transparent;padding:6px 7px;font-size:13px;color:var(--ink);font-style:italic}
+.mrole{display:block;font-size:12.5px;color:var(--ink);font-weight:600;padding:2px 5px}
+.mrole small{display:block;font-size:10.5px;color:var(--orange);font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.mshift{border:2px dashed var(--line);border-radius:6px;padding:6px 4px;text-align:center;font-size:12.5px;font-weight:700;color:var(--muted);min-width:84px}
+.mshift.k-O{border-color:#B9D2DE;color:#2C5A70} .mshift.k-M{border-color:#F4C79C;color:#7A4A12} .mshift.k-C{border-color:#CBD1A9;color:#4E5A22} .mshift.k-S,.mshift.k-S2{border-color:#D2C1E0;color:#5A3E73}
+</style>
+<style>
+.roster td.dy select.k-PTO{background:var(--surface2);color:var(--ink);border-style:dashed;border-color:var(--muted)}
+.mshift.k-PTO{border-color:var(--muted);color:var(--ink);background:var(--surface2)}
+</style>
+<style>
+.nowsec{border:2px solid var(--orange)}
+.weekbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 4px}
+.weekbar b{font-size:15px;color:var(--ink);min-width:220px;text-align:center}
+.status{font-size:12.5px;font-weight:700;border-radius:999px;padding:5px 11px}
+.status.posted{background:var(--ok-bg);color:var(--ok)}
+.status.draft{background:var(--warm);color:var(--warm-ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.chip.good{background:var(--ok-bg)} .chip.good b{color:var(--ok)}
+.chip.bad{background:var(--short-bg)} .chip.bad b{color:var(--short)}
+.chip.heavy{background:var(--heavy-bg)} .chip.heavy b{color:var(--heavy)}
+.now-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.now-group{background:var(--surface2);border-radius:8px;padding:10px 12px;border-top:3px solid var(--line)}
+.now-group.floor{border-top-color:var(--ok);grid-column:span 2}
+@media (max-width:560px){.now-group.floor{grid-column:auto}}
+.now-group.huddle{border-top-color:var(--orange)} .now-group.later{border-top-color:var(--blue)} .now-group.pto{border-top-color:var(--muted)}
+.now-group h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink);display:flex;justify-content:space-between}
+.now-group h3 span{background:var(--surface);border-radius:999px;padding:0 8px;font-size:12px}
+.who-grid{display:flex;flex-wrap:wrap;gap:6px}
+.who-card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px;min-width:130px}
+.who-card b{display:block;font-size:13px;color:var(--ink)} .who-card small{font-size:11.5px;color:var(--muted)}
+.who-card.lead{border-color:var(--orange)}
+</style>
+<style>.goalnote{display:block;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);color:var(--ink);font-size:12.5px}</style>
+<style>
+.board{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:4px 0 14px}
+@media (max-width:640px){.board{grid-template-columns:1fr}}
+.bcard{background:var(--surface);border-radius:10px;padding:12px 14px;border:1px solid var(--line)}
+.bcard h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.brow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end}
+.bnum{font-size:34px;font-weight:800;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums}
+.blab{font-size:11.5px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.bgap{border-radius:8px;padding:8px 10px;text-align:center}
+.bgap.short{background:var(--short-bg)} .bgap.short .bnum,.bgap.short .blab{color:var(--short)}
+.bgap.ok{background:var(--ok-bg)} .bgap.ok .bnum,.bgap.ok .blab{color:var(--ok)}
+.bgap.over{background:var(--heavy-bg)} .bgap.over .bnum,.bgap.over .blab{color:var(--heavy)}
+.bsub{font-size:12px;color:var(--text);margin-top:8px}
+</style>
+<style>
+.wklab{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.weeksel{font-size:14px;font-weight:700;padding:8px 10px;border-radius:8px;border:2px solid var(--line);background:var(--surface);color:var(--ink);max-width:100%;min-width:0}
+.weeksel.ws-posted{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.weeksel.ws-draft,.weeksel.ws-none{border-color:var(--orange);background:var(--warm);color:var(--warm-ink)}
+.pbar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;border-radius:10px;padding:12px 16px;margin:10px 0 6px;border:2px solid}
+.pbar b{display:block;font-size:15px;text-transform:uppercase;letter-spacing:.8px}
+.pbar span{display:block;font-size:13px;margin-top:2px}
+.pbar.draft{border-color:var(--orange);color:var(--warm-ink);background:repeating-linear-gradient(135deg,var(--warm) 0 14px,var(--surface) 14px 28px)}
+.pbar.draft b{color:var(--orange)}
+.pbar.posted{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.rwrap{position:relative;border-radius:10px}
+.rwrap.is-draft{outline:3px dashed var(--orange);outline-offset:4px;background:repeating-linear-gradient(135deg,transparent 0 22px,rgba(246,140,44,.07) 22px 44px)}
+.rwrap.is-draft::before{content:"DRAFT · NOT POSTED";position:sticky;left:0;display:block;font-size:11px;font-weight:800;letter-spacing:1.5px;color:var(--orange);padding:4px 2px}
+.roster td.dy .lsel{display:block;width:100%;min-width:84px;margin-top:3px;font-size:11px;padding:3px 2px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--muted);font-weight:600}
+.mshift small{display:block;font-size:10.5px;font-weight:600;color:var(--muted)}
+.roster th small.dt{display:block;font-weight:500;font-size:10.5px}
+.roster td.dy select.k-P{background:#D5EEEA;color:#1F5C55;border-color:#A9D8D0}
+.mshift.k-P{border-color:#A9D8D0;color:#1F5C55}
+.tag.P{background:#D5EEEA;color:#1F5C55}
+:root[data-theme="dark"] .tag.P,:root[data-theme="dark"] .roster td.dy select.k-P{background:#1D3E3A;color:#9ED9CF}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tag.P,:root:not([data-theme="light"]) .roster td.dy select.k-P{background:#1D3E3A;color:#9ED9CF}}
+.now-group.lunch{border-top-color:var(--sage)}
+.hours span.hnote{background:var(--warm);color:var(--warm-ink);font-weight:700}
+</style>
+<style>[hidden]{display:none!important}</style>
+<style>
+.wklab{flex:1 1 240px;min-width:0}
+.wklab .weeksel{flex:1;width:100%}
+.roster td.dy .lsel{font-size:10.5px;padding:3px 0;letter-spacing:-.2px}
+</style>
+<style>
+.nhchk{display:flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--muted);margin-top:3px;white-space:nowrap;cursor:pointer}
+.nhchk input{width:auto;margin:0}
+tr.nhrow td.nm input:not([type=checkbox]){border-color:var(--blue);border-style:dashed}
+tr.nhrow .nhchk{color:var(--blue)}
+tr.nhrow td.dy select{opacity:.75;border-style:dashed}
+.nhbadge,.nhtxt{color:var(--blue)}
+.nhbadge{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;background:var(--icy);border-radius:4px;padding:1px 5px;margin-left:4px}
+.chip.nhchip{background:var(--icy)} .chip.nhchip b{color:var(--blue)}
+</style>
+<style>.roster td.nm .nhchk{justify-content:flex-start;text-align:left} .roster td.nm .nhchk input{width:14px!important;min-width:0;height:14px;flex:none;padding:0}</style>
+<style>#stdSec.locked .settings input{background:var(--surface2);color:var(--muted);cursor:not-allowed}</style>
+<style>
+.dh{display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;margin-top:2px;border-radius:4px;padding:1px 4px}
+.dh.closed{background:var(--closed);color:var(--ink)} .dh.tp{background:var(--orange);color:#fff}
+th small.dt{display:block;font-weight:500;font-size:10.5px}
+.hours span.hnote.closed{background:var(--closed);color:var(--ink)} .hours span.hnote.tp{background:var(--orange);color:#fff}
+.mshift.k-closed{background:var(--closed);border-color:var(--closed);color:var(--muted)}
+.roster td.dy select.k-bad{background:var(--short-bg);color:var(--short);border-color:var(--short)}
+.mcard.tpcard{border:2px solid var(--orange)}
+.pill.tp{background:var(--orange);color:#fff}
+td.nolead{box-shadow:inset 0 -4px 0 var(--short)}
+tr.leadrow td{font-weight:800}
+.nhchk.done{color:var(--ok)}
+.calgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px}
+@media (max-width:760px){.calgrid{grid-template-columns:1fr}}
+.calcard{background:var(--surface2);border-radius:10px;padding:12px 14px}
+.calcard h3{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink)}
+.calrow{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--ink)}
+.caltab{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.caltab th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:4px}
+.caltab td{padding:4px}
+.caltab input,.caltab select{width:100%;min-width:70px;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+.gcard{display:flex;gap:16px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:10px 0}
+.gletter{flex:none;width:72px;height:72px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;color:#fff;background:var(--muted)}
+.g-A{background:#5E6B2F} .g-B{background:#3F738D} .g-C{background:#F68C2C} .g-D{background:#B3413F} .g-F{background:#802020} .g-none{background:var(--closed);color:var(--muted)}
+.gbody{flex:1;min-width:0}
+.ghead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--ink);font-size:15px}
+.gparts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:10px}
+.gpart{font-size:12px;color:var(--text)} .gtop{display:flex;justify-content:space-between;color:var(--ink);font-weight:700}
+.gbar{height:6px;background:var(--surface2);border-radius:4px;margin:4px 0;overflow:hidden} .gbar i{display:block;height:100%}
+.gbar i.ok{background:var(--ok)} .gbar i.mid{background:var(--orange)} .gbar i.low{background:var(--short)}
+.gpart small{display:block;color:var(--muted)}
+.gkey{background:var(--surface2);border-radius:8px;padding:8px 12px;margin:0 0 10px}
+.btab{width:100%;border-collapse:collapse;font-size:13px;color:var(--ink)}
+.btab th{font-size:11px;text-transform:uppercase;color:var(--muted);padding:6px;text-align:center}
+.btab td{padding:6px;text-align:center;border-top:1px solid var(--line)}
+.btab tr[data-st]{cursor:pointer} .btab tr[data-st]:hover td{background:var(--surface2)}
+.btab tr.me td{background:var(--icy)}
+.btab td.bad{color:var(--short);font-weight:800}
+.gpill{display:inline-block;min-width:28px;border-radius:6px;padding:2px 6px;color:#fff;font-weight:800}
+.gpill.g-none{color:var(--muted)}
+@media (max-width:560px){.gcard{flex-direction:column}}
+</style>
+<style>
+.tsel{display:block;width:100%;margin-top:3px;font-size:11px;font-weight:700;padding:3px 4px;border-radius:5px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+.tsel.t-H{background:#E7EAD6;color:#4E5A22;border-color:#CBD1A9} .tsel.t-M{background:#DCE9EF;color:#2C5A70;border-color:#B9D2DE} .tsel.t-L{background:#F6DEDC;color:#8A2F2D;border-color:#E6B7B4}
+.tchip{display:inline-block;border-radius:4px;padding:0 5px;font-size:10px;font-weight:800;text-transform:uppercase}
+.tchip.t-H{background:#E7EAD6;color:#4E5A22} .tchip.t-M{background:#DCE9EF;color:#2C5A70} .tchip.t-L{background:#F6DEDC;color:#8A2F2D}
+.nhbadge.tag{background:#E9E0F0;color:#5A3E73}
+.nhchk.tagged{color:#5A3E73}
+tr.nhtag td.nm input:not([type=checkbox]){border-color:#8B6BAA;border-style:dashed}
+td.mx{font-size:11px;white-space:nowrap}
+.mh,.mm,.ml,.mu{display:inline-block;min-width:16px;border-radius:3px;margin:0 1px;font-weight:800;padding:0 2px;text-align:center}
+.mh{background:#E7EAD6;color:#4E5A22} .mm{background:#DCE9EF;color:#2C5A70} .ml{background:#F6DEDC;color:#8A2F2D} .mu{background:var(--surface2);color:var(--muted)}
+.mnh{display:inline-block;font-style:normal;font-size:9px;font-weight:800;color:#5A3E73;margin-left:2px}
+td.mx.mx-bad{background:var(--short-bg);box-shadow:inset 0 0 0 2px var(--short)}
+td.mx.mx-nh{background:#E9E0F0;box-shadow:inset 0 0 0 2px #8B6BAA}
+td.mx.mx-weak{background:var(--warm)}
+td.mx.mx-ok{background:var(--surface)}
+td.mx.mx-hot{border-top:3px solid var(--orange)}
+</style>
+<style>
+.gextra{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.gx{background:var(--surface2);border-radius:8px;padding:8px 10px}
+.gx > span{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.gx b{display:block;font-size:20px;color:var(--ink);margin:2px 0}
+.gx small{display:block;font-size:11.5px;color:var(--text)}
+#actSec code{background:var(--surface2);border-radius:4px;padding:1px 4px;font-size:12px}
+</style>
+<style>.exc{display:inline-flex;align-items:center;gap:4px;background:var(--warm);color:var(--warm-ink);border-radius:5px;padding:2px 6px;margin:2px 4px 2px 0;font-size:12px;font-weight:700}
+.exc .icon-btn{width:20px;height:20px;padding:0;font-size:11px}
+.exadd{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:6px;vertical-align:middle}
+.exadd select{width:auto;min-width:0;font-size:12px;padding:3px}
+tr.exrow td{border-bottom:1px solid var(--line);padding-bottom:8px}</style>
+<style>.calgrid{grid-template-columns:repeat(2,minmax(0,1fr))} @media (max-width:760px){.calgrid{grid-template-columns:1fr}} .calrow span{text-align:right}</style>
+
+<style>body{margin:0}</style>
+</head>
+<body>
+<style>
+/* ---------- sign-in, setup and account bar (outside the app) ---------- */
+#gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg)}
+.gcard2{background:var(--surface);border:1px solid var(--line);border-radius:14px;max-width:440px;width:100%;padding:28px 24px;box-shadow:0 8px 30px rgba(0,59,74,.08)}
+.gcard2 .brand{font-size:12px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--orange)}
+.gcard2 h1{margin:6px 0 6px;font-size:26px;color:var(--navy)}
+:root[data-theme="dark"] .gcard2 h1{color:var(--ink)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .gcard2 h1{color:var(--ink)}}
+.gcard2 p{margin:0 0 14px;color:var(--text);font-size:14px;line-height:1.5}
+.gcard2 input[type=email]{width:100%;font:inherit;font-size:15px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);box-sizing:border-box}
+.gcard2 .btn{width:100%;margin-top:10px;justify-content:center}
+.gmsg{margin-top:12px;font-size:13px;color:var(--text)}
+.gmsg.err{color:var(--short);font-weight:700}
+#acctbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 16px;background:var(--band);color:var(--band-sub);font-size:12.5px}
+#acctbar button{font:inherit;font-size:12.5px;background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer}
+#accessDlg{border:0;border-radius:12px;padding:0;max-width:560px;width:calc(100% - 32px);background:var(--surface);color:var(--ink)}
+#accessDlg::backdrop{background:rgba(0,0,0,.45)}
+#accessDlg .in{padding:20px 22px}
+#accessDlg h2{margin:0 0 6px;font-size:18px}
+#accessDlg label{display:block;font-size:13px;font-weight:700;margin:12px 0 4px}
+#accessDlg textarea{width:100%;min-height:90px;font:inherit;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);box-sizing:border-box}
+#accessDlg .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+</style>
+
+<div id="gate" hidden>
+  <div class="gcard2">
+    <div class="brand">1915 South</div>
+    <h1>Smart Scheduler</h1>
+    <div id="gateBody"></div>
+  </div>
+</div>
+
+<div id="acctbar" hidden>
+  <span id="acctWho"></span>
+  <button id="acctAccess" hidden>Access</button>
+  <button id="acctOut">Sign out</button>
+</div>
+
+<dialog id="accessDlg">
+  <div class="in">
+    <h2>Who can use the scheduler</h2>
+    <p class="note" style="margin:0">Only you can change this. People sign in with their work email and a one-time link.</p>
+    <label><input type="checkbox" id="accAll"> Anyone with an @<span class="accDomain"></span> email can sign in and schedule</label>
+    <label for="accLeaders">Or only these leaders (one email per line)</label>
+    <textarea id="accLeaders" placeholder="gm.batonrouge@1915south.com"></textarea>
+    <label for="accAdmins">Admins: can also upload weekly traffic (one email per line)</label>
+    <textarea id="accAdmins" placeholder="wphillips@1915south.com"></textarea>
+    <div class="row"><button class="btn ghost" id="accCancel">Cancel</button><button class="btn" id="accSave">Save</button></div>
+  </div>
+</dialog>
+
+<div id="appRoot" hidden>
+
+
+<div class="band"><div class="band-in">
+  <div>
+    <div class="eyebrow">1915 South · All 41 stores · <span id="storeRegion"></span></div>
+    <h1>Smart Scheduler</h1>
+    <p>Right people, right place, right time. Build the week from our standard shifts, give every consultant a full 40 hours, and put one consultant on the floor for every guest.</p>
+  </div>
+  <div class="picker">
+    <label for="store">Your store</label>
+    <select id="store"></select>
+  </div>
+</div></div>
+
+<main>
+  <section aria-labelledby="now-h" class="nowsec">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="now-h">Who's working right now</h2>
+      <span class="note">Updates live as leaders post and change schedules</span>
+    </div>
+    <p class="lede" id="nowHead" style="margin:6px 0 12px"></p>
+    <div id="nowBody"></div>
+  </section>
+  <section aria-labelledby="how-h">
+    <h2 id="how-h">How to use this</h2>
+    <div class="steps">
+      <div class="step"><span class="n">1</span><b>Find your hot zones</b>Orange hours are the busiest of each day. That's where the team needs to be.</div>
+      <div class="step"><span class="n">2</span><b>Use the standard shifts</b>Every shift starts 30 minutes early for the huddle. Pick Opener, Mid or Closer for each day.</div>
+      <div class="step"><span class="n">3</span><b>Hit your hours</b>Full-timers land at 40, part-timers around 20. Hours total on the right, PTO included. Red means under or over.</div>
+      <div class="step"><span class="n">4</span><b>Check and post</b>Red hours are short, blue hours are heavy. Fix them, then post. Until you post, the week says Draft in orange and your team can't see it.</div>
+    </div>
+  </section>
+
+  <section aria-labelledby="ov-h">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <h2 id="ov-h">Your week at a glance</h2>
+        <div class="row" style="gap:8px;margin-top:6px"><span id="shapePill" class="pill"></span><span class="note" id="wkNote"></span></div>
+      </div>
+      <div class="seg" role="group" aria-label="What the grid shows">
+        <button id="vGuests" aria-pressed="true">Guests per hour</button>
+        <button id="vNeed" aria-pressed="false">Consultants needed</button>
+      </div>
+    </div>
+    <div class="hours" id="hoursLine" style="margin-top:12px"></div>
+    <div class="overview">
+      <div class="scroll"><table class="wk" id="wkGrid"></table></div>
+      <div class="legend">
+        <div class="lg"><div class="sw t-hot"></div><div><b>Hot zone.</b> 75% or more of that day's busiest hour. All hands on the floor, leader included.</div></div>
+        <div class="lg"><div class="sw t-warm"></div><div><b>Building.</b> 50 to 75% of peak. Steady traffic, staff it solidly.</div></div>
+        <div class="lg"><div class="sw t-base"></div><div><b>Lighter.</b> Breaks, lunches, follow-ups and delivery calls go here.</div></div>
+        <div class="lg"><div class="sw t-new"></div><div><b>New hour.</b> Sunday 11 AM has no history yet. Staff the minimum and we'll learn.</div></div>
+        <div class="lg"><div class="sw t-closed"></div><div><b>Closed.</b></div></div>
+        <p class="note" id="srcNote" style="margin:4px 0 0"></p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="shape-h">
+    <h2 id="shape-h">Three store shapes, three ways to schedule</h2>
+    <p class="lede">Most stores peak in the early afternoon. The difference is which side of that peak is heavier on weekdays, and that tells you where Openers and Closers go.</p>
+    <div class="shapes" id="shapes"></div>
+  </section>
+
+  <section aria-labelledby="menu-h">
+    <h2 id="menu-h">Your shift menu</h2>
+    <p class="lede">These are the only shifts we schedule. Every shift starts with a 30-minute huddle, so the floor time begins half an hour after arrival.</p>
+    <div class="menu" id="menu"></div>
+  </section>
+
+  <section aria-labelledby="roster-h">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <h2 id="roster-h">Build the week</h2>
+        <p class="lede" style="margin:2px 0 0">Click a name to edit it, pick a role, rate each seller High, Middle or Low, then pick a shift for each day. Blue is an Opener, green is a Closer, orange is a Mid, purple is Sunday, teal is Part-time, gray dashed is PTO. Every shift of 6 hours or more gets a lunch time under it. The tool staggers lunches into your lightest hours, and you can change any of them. Names carry over from your last saved week.</p>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn orange" id="suggest">Suggest a roster</button>
+        <button class="btn ghost" id="balance" title="Keeps every hour's floor count and everyone's hours. Only changes who works which shift.">Balance the week</button>
+        <button class="btn ghost" id="copyLast">Copy last week</button>
+        <button class="btn ghost" id="clear">Clear week</button>
+      </div>
+    </div>
+    <div class="weekbar">
+      <button class="btn ghost" id="weekPrev" aria-label="Previous week">‹</button>
+      <label class="wklab" for="weekSel">Week<select id="weekSel" class="weeksel"></select></label>
+      <button class="btn ghost" id="weekNext" aria-label="Next week">›</button>
+      <button class="btn ghost" id="weekNow">This week</button>
+      <span id="weekHint" class="note"></span>
+      <span id="postStatus" class="status"></span>
+      <button class="btn" id="postBtn" hidden>Post this week</button>
+    </div>
+    <div id="draftBar" class="pbar draft">
+      <div><b id="pbarTitle"></b><span id="pbarText"></span></div>
+      <div class="row" style="gap:8px"><button class="btn orange" id="postBtn2" hidden>Post this week</button><button class="btn ghost" id="unpost" hidden>Move back to draft</button></div>
+    </div>
+    <div id="viewOnly" class="tip info" hidden style="margin-top:8px">View only. You can see this store's schedule, but only leaders with access can change it.</div>
+    <div id="gradeCard" class="gcard" aria-live="polite"></div>
+    <div class="row" style="gap:10px;margin:10px 0 4px"><span id="exampleTag" class="example" hidden>Suggested roster: click any name to type your team member's name</span></div>
+    <div class="teambox">
+      <h3>Your team</h3>
+      <p class="note" style="margin:0 0 8px">Each box starts at the recommended number for 1-to-1 coverage with 40-hour weeks. Change it to who you actually have and the tool shows whether you're staffed right and fills your busiest hours first. Part-timers count as half a consultant, so two part-timers equal one full-timer. New hires are added on the schedule with + Add new hire. They show on the schedule but don't count toward coverage or staffing until their training weeks are up, then they count automatically. Names you've typed are kept.</p>
+      <p class="note" id="teamSrc" style="margin:0 0 8px;color:var(--ink)"></p>
+      <div id="staffBoard" class="board"></div>
+      <div class="settings" id="teamInputs"></div>
+      <div id="staffMsg" class="tip info" style="margin-top:12px"></div>
+    </div>
+    <div class="chips" id="chips" style="margin:6px 0 12px"></div>
+    <div class="scroll rwrap" id="rosterWrap"><table class="roster" id="roster"></table></div>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn ghost" id="addC">+ Add consultant</button>
+      <button class="btn ghost" id="addPT">+ Add part-timer</button>
+      <button class="btn ghost" id="addNH">+ Add new hire</button>
+      <button class="btn ghost" id="addL">+ Add leader</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="cov-h">
+    <div class="row" style="justify-content:space-between"><h2 id="cov-h">Coverage check</h2>
+      <div class="seg" role="group" aria-label="What the coverage grid shows"><button id="cvCount" aria-pressed="true">Floor count</button><button id="cvMix" aria-pressed="false">Talent mix</button></div></div>
+    <p class="lede">Right people, right place, right time. Floor count shows whether you have enough people. Talent mix shows who they are: High, Middle and Low performers on the floor each hour. Each box shows consultants on the floor over consultants needed for that hour. Floor time starts after the huddle. Someone at lunch counts as half for that hour, so 3.5 means one person is at lunch for 30 minutes.</p>
+    <div class="planner">
+      <div class="scroll"><table class="cov wk" id="cov"></table>
+        <div class="row note" id="mixLegend" hidden style="gap:14px;margin-top:8px">
+          <span><span class="mh">2</span><span class="mm">1</span><span class="ml">1</span> High · Middle · Low on the floor</span>
+          <span><span class="tag" style="background:var(--short-bg);color:var(--short)">Red</span> hot zone with no High</span>
+          <span><span class="tag" style="background:#E9E0F0;color:#5A3E73">Purple</span> new hire (NH) with no High or Middle</span>
+          <span><span class="tag" style="background:var(--warm);color:var(--warm-ink)">Orange</span> Lows outnumber Highs and Middles</span>
+        </div>
+        <div class="row note" id="covLegend" style="gap:14px;margin-top:8px">
+          <span><span class="tag" style="background:var(--short-bg);color:var(--short)">Short</span> fewer consultants than guests</span>
+          <span><span class="tag" style="background:var(--ok-bg);color:var(--ok)">On target</span> 1 to 1, or 1 extra</span>
+          <span><span class="tag" style="background:var(--heavy-bg);color:var(--heavy)">Heavy</span> 2 or more extra</span>
+        </div>
+      </div>
+      <aside class="coach" aria-live="polite">
+        <h3>Coach's corner</h3>
+        <div id="tips" style="display:flex;flex-direction:column;gap:10px"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="board-h">
+    <h2 id="board-h">Schedule scoreboard</h2>
+    <p class="lede" style="margin:2px 0 6px">Every store's schedule for the week, graded the same way. Click a store to open it.</p>
+    <p class="note" id="boardHead" style="margin:0 0 10px;color:var(--ink)"></p>
+    <div class="gkey note"><b>How the grade works (100 points):</b> guest coverage 35 (hot-zone hours count double) · leader in the store 20 · talent mix 15 (a High in every hot zone, Lows never outnumber Highs and Middles, new hires always with a High or Middle, team rated) · hours targets 10 · posted before the week starts 10 · right hours 10 (no heavy hours while other hours are short). Any hour with no leader in the store caps the grade at a C. A 90+, B 80+, C 70+, D 60+, F below 60.</div>
+    <div class="scroll"><table class="btab" id="boardTable"></table></div>
+  </section>
+
+  <section aria-labelledby="act-h" id="actSec">
+    <h2 id="act-h">Actual traffic: validate the week</h2>
+    <p class="lede" style="margin:2px 0 8px">Upload what really walked in from ShopperTrak or eTrax. Every store's week is then graded again against real traffic, and the forecast is checked against what happened.</p>
+    <div id="actStatus" class="tip info" style="margin:0 0 10px"></div>
+    <div id="actUpload">
+      <div class="row" style="gap:10px;align-items:center">
+        <label class="btn ghost" for="actFile" style="cursor:pointer">Choose a CSV file</label><input id="actFile" type="file" accept=".csv,text/csv" hidden>
+        <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="actHalf" checked> ShopperTrak counts are raw (divide LA/MS stores by 2)</label>
+      </div>
+      <p class="note" style="margin:8px 0 0">One row per store, date and hour: <code>store,date,hour,guests</code> (for example <code>Baton Rouge,2026-10-05,14,17</code>). A wide file with one column per hour (<code>store,date,10,11,12,...</code>) works too. eTrax counts are one per guest, so they're used as they are. Rows for the same store, date and hour are added together.</p>
+      <div id="actPreview"></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="set-h" id="stdSec">
+    <h2 id="set-h">Staffing standard</h2>
+    <p class="tip info" id="stdNote" style="margin:0 0 12px"></p>
+    <div class="settings">
+      <label for="gpc">Guests per consultant, per hour<input id="gpc" type="number" min="0.5" max="4" step="0.5" value="1"><small>1915 South standard is 1 to 1, every open hour.</small></label>
+      <label for="minc">Minimum consultants on the floor<input id="minc" type="number" min="1" max="6" step="1" value="2"><small>Applies to every open hour.</small></label>
+      <label for="target">Weekly hours target<input id="target" type="number" min="20" max="50" step="1" value="40"><small>Every consultant should land here.</small></label>
+      <label for="ptoh">PTO hours per day<input id="ptoh" type="number" min="0" max="10" step="0.5" value="8"><small>Paid hours a PTO day counts toward the weekly total. PTO never counts as overtime.</small></label>
+      <label for="pttarget">Part-time weekly hours<input id="pttarget" type="number" min="8" max="32" step="1" value="20"><small>Part-timers land within 4 hours of this. Two part-timers count as one consultant.</small></label>
+      <label for="lunch">Unpaid lunch per shift (hours)<input id="lunch" type="number" min="0" max="1" step="0.25" value="0.5"><small>Subtracted from shifts of 6 hours or more. A 9:30 to 6 shift pays 8 hours.</small></label>
+      <label for="nhweeks">New hire training weeks<input id="nhweeks" type="number" min="1" max="12" step="1" value="4"><small>New hires stop counting as trainees and start counting toward staffing after this many weeks.</small></label>
+      <label for="nhtag">New hire tag after training (weeks)<input id="nhtag" type="number" min="0" max="12" step="1" value="4"><small>After training, new hires stay tagged this long so leaders pair them with a High or Middle performer.</small></label>
+    </div>
+  </section>
+
+  <section aria-labelledby="cal-h" id="calSec">
+    <h2 id="cal-h">Holidays and tentpoles</h2>
+    <p class="tip info" id="calNote" style="margin:0 0 12px"></p>
+    <div class="calgrid">
+      <div class="calcard"><h3>Closed every year</h3><p class="note" style="margin:0 0 8px">Thanksgiving, Christmas Eve, Christmas Day and Easter. No shifts can be scheduled.</p><div id="calClosed"></div></div>
+      <div class="calcard"><h3>Tentpoles every year</h3><p class="note" style="margin:0 0 8px">Presidents Day, Memorial Day and Labor Day weekends (Saturday to Monday) and Black Friday (Friday to Monday). They repeat automatically. Click Change to set different hours for one date.</p><div id="calAuto"></div></div>
+      <div class="calcard" style="grid-column:1 / -1"><h3>Custom tentpoles and changes</h3><p class="note" style="margin:0 0 8px">Set fixed hours, or open early and keep each store's normal close. Add store exceptions where one store runs different hours. Traffic lift multiplies the normal traffic for that day so staffing scales up (1 = normal day, 2 = double).</p>
+        <div class="scroll"><table class="caltab" id="calTable"></table></div>
+        <div class="row" style="gap:8px;margin-top:10px"><button class="btn ghost" id="calAdd">+ Add tentpole</button><button class="btn" id="calSave">Save tentpoles</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="share-h">
+    <h2 id="share-h">Share your week</h2>
+    <p class="lede">Posted schedules are live for everyone with the link. You can still copy the week to paste into the 1915 South Leadership Teams channel.</p>
+    <div class="row" style="gap:8px;margin-bottom:8px"><button class="btn" id="copy">Copy week plan</button><span class="note">Every change saves automatically. Drafts are saved but only posted weeks show to your team.</span></div>
+    <textarea id="planText" readonly aria-label="Week plan text" style="min-height:180px"></textarea>
+  </section>
+</main>
+<div class="toast" id="toast" hidden></div>
+
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>

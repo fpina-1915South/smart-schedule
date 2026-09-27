@@ -1,0 +1,36 @@
+rules_version = '2';
+// 1915 South Smart Scheduler: who can read and write what.
+// Owner: OWNER below must match ownerEmail in config.js. Company domain is in isLeader().
+// Leaders and admins are managed in the app (Access button), stored in config/access.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function OWNER() { return 'fpina@1915south.com'; }
+
+    function signedIn() { return request.auth != null && request.auth.token.email != null && request.auth.token.email_verified == true; }
+    function email() { return request.auth.token.email.lower(); }
+    function isOwner() { return signedIn() && email() == OWNER(); }
+    function hasAccess() { return exists(/databases/$(database)/documents/config/access); }
+    function acc() { return get(/databases/$(database)/documents/config/access).data; }
+    function isAdmin() { return isOwner() || (signedIn() && hasAccess() && email() in acc().get('admins', [])); }
+    function isLeader() {
+      return isAdmin() || (signedIn() && hasAccess() && (
+        email() in acc().get('leaders', []) ||
+        (acc().get('allowDomain', false) == true && email().matches('.*@1915south[.]com'))
+      ));
+    }
+
+    // Who's allowed in. Only the owner changes it.
+    match /config/{doc} { allow read: if signedIn(); allow write: if isOwner(); }
+    // Display names for "last changed by". Each person writes only their own.
+    match /users/{uid} { allow read: if isLeader(); allow write: if signedIn() && request.auth.uid == uid; }
+    // Store hours and traffic averages, staffing standard, holidays and tentpoles: owner only.
+    match /stores/{doc} { allow read: if isLeader(); allow write: if isOwner(); }
+    match /settings/{doc} { allow read: if isLeader(); allow write: if isOwner(); }
+    // Weekly actual traffic: owner and admins upload.
+    match /actuals/{doc} { allow read: if isLeader(); allow write: if isAdmin(); }
+    // Schedules, team counts and performance ratings: any leader.
+    match /rosters/{doc} { allow read, write: if isLeader(); }
+    match /teams/{doc} { allow read, write: if isLeader(); }
+    match /perf/{doc} { allow read, write: if isLeader(); }
+  }
+}
