@@ -9,7 +9,7 @@ const SHAPES = {
   evening:{t:"Heavier evenings", d:"Run leaner on Openers and load up your Mid and Closer shifts so you stay heavy to close.", pill:"Heavier evenings"}
 };
 const KEY = "smart-scheduler-v3";
-const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"CSR", CSRK:"CSR (key holder)"};
+const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"Guest Solutions / CSR", CSRK:"Guest Solutions key holder"};
 const LEAD_ORDER = ["GM","L","LSL","ASL","KH","CSRK"];
 const isLead = r => r !== "C" && r !== "PT" && r !== "CSR";   // counts toward leader on the floor
 const fte = r => r === "PT" ? 0.5 : 1;          // two part-timers equal one full-time consultant
@@ -499,7 +499,7 @@ function leaderPlan(store, roles, names, presets, w){
   }
   return people;
 }
-const TEAM_FIELDS = [["C","Full-time consultants"],["pt","Part-time (each counts ½)"],["GM","General Managers"],["L","Asst General Managers"],["LSL","Lead Selling Leaders"],["ASL","Asst Selling Leaders"],["KH","Key Holders"],["CSR","CSRs (not counted in coverage)"]];
+const TEAM_FIELDS = [["C","Full-time consultants"],["pt","Part-time (each counts ½)"],["GM","General Managers"],["L","Asst General Managers"],["LSL","Lead Selling Leaders"],["ASL","Asst Selling Leaders"],["KH","Key Holders"],["CSR","Guest Solutions / CSRs (not counted)"],["CSRK","Guest Solutions key holders (hold a key, don't sell)"]];
 function teamOf(store){ return TEAMS[store] || (TEAMS[store] = {}); }
 const blank = v => v === "" || v == null || isNaN(v);
 function recommended(store){ return withWeek(FUTURE, () => recommended0(store)); }
@@ -522,7 +522,7 @@ function recommended0(store){
   }
   const sellCov = (di,h) => leads.filter(p => isCounted(p) && p.days[di] && onFloor(tplOf(store,di,p.days[di]), h)).length;
   const cp = autoSlots(store, di => h => Math.max(0, need(guests(store,di,h), store, di, h) - sellCov(di,h)), w);
-  const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0, CSR:0}; lroles.forEach(r => counts[r]++);
+  const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0, CSR:0, CSRK:0}; lroles.forEach(r => counts[r]++);
   return {counts, leads, cp, slotted};
 }
 function suggest(store, week, raw){
@@ -535,7 +535,11 @@ function suggest(store, week, raw){
   const nameFor = (role, i, fallback, nh) => { const a = sameRole(cur, role, nh), b = sameRole(last, role, nh); return a[i] ? a[i].name : b[i] ? b[i].name : fallback; };
   const ptoFor = (role, i, nh) => { const same = sameRole(cur, role, nh); return same[i] ? same[i].days.map(k => k === "PTO" ? "PTO" : "") : null; };
   const leadGiven = ["GM","L","LSL","ASL","KH"].some(k => !blank(team[k]));
-  const roles = []; ["GM","L","LSL","ASL","KH"].forEach(k => { const n = leadGiven ? (blank(team[k]) ? rec.counts[k] : (+team[k]||0)) : rec.counts[k]; for (let x=0; x<n; x++) roles.push(k); });
+  /* A Guest Solutions key holder takes one of the key holder spots the tool would otherwise recommend. */
+  const gsk = blank(team.CSRK) ? 0 : Math.max(0, +team.CSRK);
+  const roles = []; ["GM","L","LSL","ASL","KH"].forEach(k => { let n = leadGiven ? (blank(team[k]) ? rec.counts[k] : (+team[k]||0)) : rec.counts[k];
+    if (k === "KH" && blank(team.KH)) n = Math.max(0, n - gsk); for (let x=0; x<n; x++) roles.push(k); });
+  for (let x=0; x<gsk; x++) roles.push("CSRK");
   const rc = {}; const lidx = roles.map(r => (rc[r] = (rc[r]||0) + 1) - 1);
   const leads = roles.length ? leaderPlan(store, roles,
     roles.map((r,x) => nameFor(r, lidx[x], ROLES[r] + (lidx[x] > 0 ? " " + (lidx[x]+1) : ""))), roles.map((r,x) => ptoFor(r, lidx[x])), w) : [];
@@ -800,7 +804,7 @@ function renderRoster(){
     + idx.filter(x => x.p.role==="C").map(x => row(x.p, x.i)).join("") + idx.filter(x => x.p.role==="PT").map(x => row(x.p, x.i)).join("") + ld.filter(x => sells(x.p.role)).map(x => mirror(x.p)).join("");
   html += `<tr class="grp"><td colspan="11">Leadership · leaders on the floor · edit selling leaders and key holders here</td></tr>` + ld.map(x => row(x.p, x.i)).join("");
   const csr = idx.filter(x => x.p.role === "CSR");
-  if (csr.length) html += `<tr class="grp"><td colspan="11">CSR · scheduled but not counted toward sales coverage or leader in store</td></tr>` + csr.map(x => row(x.p, x.i)).join("");
+  if (csr.length) html += `<tr class="grp"><td colspan="11">Guest Solutions · scheduled but not counted toward sales coverage or leader in store</td></tr>` + csr.map(x => row(x.p, x.i)).join("");
   html += `</tbody><tfoot><tr><td style="text-align:left;background:transparent">Selling on the floor</td><td style="background:transparent"></td>${DAYS.map((_,di) => `<td>${r.people.filter(p => isCounted(p) && p.days[di] && p.days[di] !== "PTO").length}</td>`).join("")}<td></td><td style="background:transparent"></td></tr></tfoot>`;
   $("roster").innerHTML = html;
   if (!canWrite) $("roster").querySelectorAll("input,select,button").forEach(el => el.disabled = true);
@@ -1296,14 +1300,14 @@ $("suggest").addEventListener("click", () => { const k = rk(S.store, S.week), fr
   renderAll(); });
 $("clear").addEventListener("click", () => { const r = roster(S.store); r.people.forEach(p => p.days = Array(7).fill("")); commit(S.store, S.week, r); renderAll(); toast("Week cleared"); });
 function add(role, nh){ const r = roster(S.store); const n = (nh ? r.people.filter(p => p.nh).length : r.people.filter(p => p.role===role).length) + 1;
-  const np = {name:nh ? "New hire " + n : ({L:"Leader ", PT:"Part-timer ", CSR:"CSR "}[role] || "Consultant ") + n, role, days:Array(7).fill(""), lunch:Array(7).fill(null)};
+  const np = {name:nh ? "New hire " + n : ({L:"Leader ", PT:"Part-timer ", CSR:"Guest Solutions ", CSRK:"GS key holder "}[role] || "Consultant ") + n, role, days:Array(7).fill(""), lunch:Array(7).fill(null)};
   if (nh){ np.nh = true; np.nhStart = S.week; }
   r.people.push(np); commit(S.store, S.week, r); renderAll();
   const el = $("nm" + (r.people.length-1)); if (el){ el.focus(); el.select(); } }
 $("addC").addEventListener("click", () => add("C"));
 $("addL").addEventListener("click", () => add("L"));
 $("addPT").addEventListener("click", () => add("PT"));
-(() => { if ($("addCSR")) return; const b = document.createElement("button"); b.className = "btn ghost"; b.id = "addCSR"; b.textContent = "+ Add CSR"; $("addL").after(b); b.addEventListener("click", () => add("CSR"));
+(() => { if ($("addCSR")) return; const b = document.createElement("button"); b.className = "btn ghost"; b.id = "addCSR"; b.textContent = "+ Add Guest Solutions"; $("addL").after(b); b.addEventListener("click", () => add("CSR"));
   const st = document.createElement("style"); st.textContent = `.roster td.dy select.k-X,.mshift.k-X{background:#FFF4E6;color:#8A4B0F;border-color:#F68C2C}
   .roster td.dy select.k-F,.mshift.k-F{background:#DBECF1;color:#003B4A;border-color:#3F738D} .tag.F{background:#DBECF1;color:#003B4A} .tag.X{background:#FFF4E6;color:#8A4B0F}
   .roster td.dy .adj{display:flex;flex-direction:column;gap:2px;margin-top:3px} .roster td.dy .adj select{min-width:0;width:100%;font-size:11px;padding:3px 1px;border:1px solid #F68C2C;border-radius:5px;background:var(--surface);color:var(--ink);font-weight:600}
