@@ -28,7 +28,7 @@ const isCounted = p => sells(p.role) && !nhActive(p);
 const leadCounted = p => isLead(p.role) && !nhActive(p);
 const sells = r => r !== "L" && r !== "GM" && r !== "CSR" && r !== "CSRK";            // counts toward consultants on the floor
 const hourly = r => r !== "L" && r !== "GM";
-const wkndReq = r => r !== "CSR";   // weekends are mandatory workdays for sales and leadership, unless on PTO           // held to the weekly hours target
+const wkndReq = r => r !== "CSR" && r !== "CSRK";   // weekends are mandatory workdays for sales and leadership, unless on PTO           // held to the weekly hours target
 let S = {store:"Baton Rouge", view:"guests", gpc:1, gpcLight:1, minc:2, target:40, lunch:0.5, pto:8, ptTarget:20, nhWeeks:4, nhTagWeeks:4};
 /* The staffing standard is one company-wide setting (db doc settings/standard). Only the artifact owner can change it. */
 const STD_KEYS = ["gpc","minc","target","lunch","pto","ptTarget","nhWeeks","nhTagWeeks"];
@@ -477,16 +477,18 @@ function leaderPlan(store, roles, names, presets, w){
   const need = [0,1,2,3,4,5,6].map(di => { if (!open[di]) return 0; const d = dayInfo(store, di), hrs = []; for (let h=d.open; h<d.close; h++) hrs.push(h);
     const one = coverSet(store, di, 1).map(k => tplOf(store, di, k)); return hrs.every(h => one.some(t => inStore(t, h))) ? 1 : 2; });
   const offOf = people.map(() => null), here = [0,1,2,3,4,5,6].map(() => 0);
-  people.forEach((p,i) => { if (p.role === "GM") offOf[i] = [2,3]; });
+  people.forEach((p,i) => { if (p.role === "GM") offOf[i] = [2,3]; else if (p.role === "CSRK") offOf[i] = [5,6]; });   // Guest Solutions key holders are off on the weekend
   const count = () => { here.fill(0); people.forEach((p,i) => { for (let di=0; di<7; di++) if (open[di] && p.days[di] !== "PTO" && offOf[i] && !offOf[i].includes(di)) here[di]++; }); };
   /* Try every combination of day-off pairs (small teams) and keep the one with the fewest short leader days, then the most even spread. */
   const free = people.map((p,i) => i).filter(i => !offOf[i]);
-  const score = () => { count(); let sc = 0; for (let di=0; di<5; di++) if (open[di]) sc += 1000 * Math.max(0, need[di] - here[di]) + here[di] * here[di]; return sc; };
+  const score = () => { count(); let sc = 0; for (let di=0; di<7; di++) if (open[di]) sc += 1000 * Math.max(0, need[di] - here[di]) + (di < 5 ? here[di] * here[di] : 0); return sc; };
   if (free.length && free.length <= 7){
     let best = null; const combo = Array(free.length).fill(0);
-    for (let n=0; n < Math.pow(3, free.length); n++){ let x = n; free.forEach((i,j) => { combo[j] = x % 3; x = Math.floor(x / 3); offOf[i] = LEAD_OFF[combo[j]]; });
+    const optsOf = i => people[i].role === "CSRK" ? LEAD_OFF.concat([[5,6]]) : LEAD_OFF;   // Guest Solutions can take the weekend off
+    const total = free.reduce((a,i) => a * optsOf(i).length, 1);
+    for (let n=0; n < total; n++){ let x = n; free.forEach((i,j) => { const o = optsOf(i); combo[j] = x % o.length; x = Math.floor(x / o.length); offOf[i] = o[combo[j]]; });
       const sc = score(); if (!best || sc < best.sc) best = {sc, c:combo.slice()}; }
-    free.forEach((i,j) => offOf[i] = LEAD_OFF[best.c[j]]);
+    free.forEach((i,j) => offOf[i] = optsOf(i)[best.c[j]]);
   } else free.forEach(i => { let best = null; LEAD_OFF.forEach(o => { offOf[i] = o; const sc = score(); if (!best || sc < best.sc) best = {sc, o}; }); offOf[i] = best.o; });
   for (let di=0; di<7; di++){ if (!open[di]) continue;
     const P = people.filter((p,i) => p.days[di] !== "PTO" && !offOf[i].includes(di));
@@ -623,7 +625,7 @@ function mixCost(store, di, r){ return mixDay(store, di, r).reduce((a,x) => a + 
 /* Work-life balance per person: days off together, and no closing one night then opening the next morning. */
 function wlbCost(store, p){
   const off = p.days.map(k => !k || k === "PTO");
-  let blocks = 0; for (let d=0; d<7; d++) if (off[d] && (d === 0 || !off[d-1])) blocks++;
+  let blocks = 0; for (let d=0; d<7; d++) if (off[d] && !off[(d+6)%7]) blocks++;   // Sun + Mon off counts as back to back
   let c = off.filter(Boolean).length >= 2 ? 6 * Math.max(0, blocks - 1) : 0;
   for (let d=0; d<6; d++){ const t1 = !off[d] && tplOf(store, d, p.days[d]), t2 = !off[d+1] && tplOf(store, d+1, p.days[d+1]); if (t1 && t2 && t1.out >= 20 && t2.in <= 9.5) c += 3; }
   return c;
@@ -631,7 +633,7 @@ function wlbCost(store, p){
 function wlbSummary(store, r){
   const ppl = r.people.filter(p => p.days.filter(k => k && k !== "PTO").length >= 3);
   const split = [], clopen = [];
-  ppl.forEach(p => { const off = p.days.map(k => !k || k === "PTO"); let blocks = 0; for (let d=0; d<7; d++) if (off[d] && (d === 0 || !off[d-1])) blocks++;
+  ppl.forEach(p => { const off = p.days.map(k => !k || k === "PTO"); let blocks = 0; for (let d=0; d<7; d++) if (off[d] && !off[(d+6)%7]) blocks++;
     if (off.filter(Boolean).length >= 2 && blocks > 1) split.push(p.name);
     for (let d=0; d<6; d++){ const t1 = !off[d] && tplOf(store, d, p.days[d]), t2 = !off[d+1] && tplOf(store, d+1, p.days[d+1]); if (t1 && t2 && t1.out >= 20 && t2.in <= 9.5){ clopen.push(p.name + " " + DAYS[d] + "-" + DAYS[d+1]); } } });
   return {n:ppl.length, together:ppl.length - split.length, split, clopen};
