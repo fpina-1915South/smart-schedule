@@ -9,8 +9,8 @@ const SHAPES = {
   evening:{t:"Heavier evenings", d:"Run leaner on Openers and load up your Mid and Closer shifts so you stay heavy to close.", pill:"Heavier evenings"}
 };
 const KEY = "smart-scheduler-v3";
-const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"CSR"};
-const LEAD_ORDER = ["GM","L","LSL","ASL","KH"];
+const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"CSR", CSRK:"CSR (key holder)"};
+const LEAD_ORDER = ["GM","L","LSL","ASL","KH","CSRK"];
 const isLead = r => r !== "C" && r !== "PT" && r !== "CSR";   // counts toward leader on the floor
 const fte = r => r === "PT" ? 0.5 : 1;          // two part-timers equal one full-time consultant
 /* New hires in training show on the schedule but never count toward coverage or staffing. */
@@ -26,7 +26,7 @@ const TIERS = {H:"High", M:"Middle", L:"Low"};
 const tierOf = (store, p) => (PERF[store] && PERF[store][p.name]) || "";
 const isCounted = p => sells(p.role) && !nhActive(p);
 const leadCounted = p => isLead(p.role) && !nhActive(p);
-const sells = r => r !== "L" && r !== "GM" && r !== "CSR";            // counts toward consultants on the floor
+const sells = r => r !== "L" && r !== "GM" && r !== "CSR" && r !== "CSRK";            // counts toward consultants on the floor
 const hourly = r => r !== "L" && r !== "GM";
 const wkndReq = r => r !== "CSR";   // weekends are mandatory workdays for sales and leadership, unless on PTO           // held to the weekly hours target
 let S = {store:"Baton Rouge", view:"guests", gpc:1, gpcLight:1, minc:2, target:40, lunch:0.5, pto:8, ptTarget:20, nhWeeks:4, nhTagWeeks:4};
@@ -511,12 +511,13 @@ function recommended0(store){
   if (slotted){
     // Leadership slots come from the staffing report (Goal column): that's what the store is slotted for.
     lroles = []; [["GM","goalGM"],["L","goalL"],["LSL","goalLSL"],["ASL","goalASL"],["KH","goalKH"]].forEach(([r,k]) => { for (let i=0; i<(+tm[k]||0); i++) lroles.push(r); });
+    while (lroles.length && lroles.length < 4) lroles.push("KH");   // at least 4 keys: a key holder (or a CSR with a key) holds the 4th
     leads = lroles.length ? leaderPlan(store, lroles, lroles.map(r => ROLES[r]), null, w) : [];
   } else {
     const lp = autoSlots(store, di => h => 1, w, true);
     let wkG = 0; for (let di=0; di<7; di++){ const d = dayInfo(store,di); for (let h=d.open; h<d.close; h++) wkG += guests(store,di,h) || 0; }
     const order = wkG >= 230 ? ["L","ASL","LSL","KH"] : ["ASL","LSL","KH","KH"]; // AGM only where traffic supports it
-    lroles = Array.from({length:lp.N}, (_,i) => order[Math.min(i,3)]);
+    lroles = Array.from({length:Math.max(4, lp.N)}, (_,i) => order[Math.min(i,3)]);   // at least 4 keys
     leads = leaderPlan(store, lroles, lroles.map(r => ROLES[r]), null, w);
   }
   const sellCov = (di,h) => leads.filter(p => isCounted(p) && p.days[di] && onFloor(tplOf(store,di,p.days[di]), h)).length;
