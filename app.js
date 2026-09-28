@@ -9,9 +9,9 @@ const SHAPES = {
   evening:{t:"Heavier evenings", d:"Run leaner on Openers and load up your Mid and Closer shifts so you stay heavy to close.", pill:"Heavier evenings"}
 };
 const KEY = "smart-scheduler-v3";
-const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder"};
+const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"CSR"};
 const LEAD_ORDER = ["GM","L","LSL","ASL","KH"];
-const isLead = r => r !== "C" && r !== "PT";   // counts toward leader on the floor
+const isLead = r => r !== "C" && r !== "PT" && r !== "CSR";   // counts toward leader on the floor
 const fte = r => r === "PT" ? 0.5 : 1;          // two part-timers equal one full-time consultant
 /* New hires in training show on the schedule but never count toward coverage or staffing. */
 /* A new hire is in training from the week they're marked until the training weeks in the staffing standard run out. */
@@ -26,8 +26,9 @@ const TIERS = {H:"High", M:"Middle", L:"Low"};
 const tierOf = (store, p) => (PERF[store] && PERF[store][p.name]) || "";
 const isCounted = p => sells(p.role) && !nhActive(p);
 const leadCounted = p => isLead(p.role) && !nhActive(p);
-const sells = r => r !== "L" && r !== "GM";            // counts toward consultants on the floor
-const hourly = r => r !== "L" && r !== "GM";           // held to the weekly hours target
+const sells = r => r !== "L" && r !== "GM" && r !== "CSR";            // counts toward consultants on the floor
+const hourly = r => r !== "L" && r !== "GM";
+const wkndReq = r => r !== "CSR";   // weekends are mandatory workdays for sales and leadership, unless on PTO           // held to the weekly hours target
 let S = {store:"Baton Rouge", view:"guests", gpc:1, gpcLight:1, minc:2, target:40, lunch:0.5, pto:8, ptTarget:20, nhWeeks:4, nhTagWeeks:4};
 /* The staffing standard is one company-wide setting (db doc settings/standard). Only the artifact owner can change it. */
 const STD_KEYS = ["gpc","minc","target","lunch","pto","ptTarget","nhWeeks","nhTagWeeks"];
@@ -181,17 +182,25 @@ function tpls(store, di){
     return [{k:"S", name:"Sun Open", in:o-0.5, out:19}, {k:"S2", name:"Sun Close", in:c-8.5, out:c}];
   }
   const O = {k:"O", name:"Opener", in:9.5, out:18};
-  if (c <= 19) return [O, {k:"C", name:"Closer", in:10.5, out:19}];
+  if (c <= 19) return [O, {k:"C", name:"Closer", in:10.5, out:19}, {k:"F", name:"Full day", in:9.5, out:19, manual:true}];
   if (c === 20) return [O, {k:"C", name:"Closer", in:11.5, out:20}];
   return [O, {k:"M", name:"Mid", in:11.5, out:20}, {k:"C", name:"Closer", in:12.5, out:21}];
 }
 const PT_T = {k:"P", name:"Part-time", in:11.5, out:16.5};   // 5 paid hours, covers the midday peak
-const tplOf = (store, di, k) => k === "P" ? (dayInfo(store, di).closed ? undefined : PT_T) : tpls(store, di).find(t => t.k === k);
+/* Custom shift: a template adjusted by the leader, stored as "X:<in>-<out>" (clock hours, quarter steps). */
+const isX = k => typeof k === "string" && k.startsWith("X:");
+const mkX = (a, b) => "X:" + (Math.round(a*4)/4) + "-" + (Math.round(b*4)/4);
+function xShift(store, di, k){ const d = dayInfo(store, di); if (d.closed) return undefined; const m = /^X:([\d.]+)-([\d.]+)$/.exec(k); if (!m) return undefined;
+  const a = +m[1], b = +m[2]; if (!(b > a)) return undefined; return {k, name:"Custom", in:a, out:b, hud: d.special ? 0.25 : 0.5, custom:true}; }
+const tplOf = (store, di, k) => k === "P" ? (dayInfo(store, di).closed ? undefined : PT_T) : isX(k) ? xShift(store, di, k) : tpls(store, di).find(t => t.k === k);
+/* Shifts the planner hands out on its own. Manual ones (like the 9:30 to 7 full day) are there for leaders to pick. */
+const autoT = (store, di) => tpls(store, di).filter(t => !t.manual);
 /* When a shift is copied into a week whose hours differ, move it to the closest shift that exists that day. */
 function remapShift(store, fromWeek, toWeek, di, k){
   if (!k || k === "PTO") return {k, note:null};
   const to = withWeek(toWeek, () => dayInfo(store, di));
   if (to.closed) return {k:"", note:`${DAYS[di]}: store closed for ${to.name}, shift removed`};
+  if (isX(k)) return {k, note:null};
   const src = withWeek(fromWeek, () => tplOf(store, di, k));
   const T = withWeek(toWeek, () => k === "P" ? [PT_T] : tpls(store, di));
   const same = T.find(t => t.k === k);
@@ -339,7 +348,7 @@ function hrsLabel(store, p){ const tot = hoursOf(store,p), wk = workedOf(store,p
 
 /* Fewest shifts per day that meet the need every open hour, least overage as tiebreak. */
 function bestCounts(store, di, needFn){
-  const T = tpls(store, di), d = dayInfo(store, di), hrs = [];
+  const T = autoT(store, di), d = dayInfo(store, di), hrs = [];
   for (let h=d.open; h<d.close; h++) hrs.push(h);
   const mx = Math.max(...hrs.map(needFn)) + 1;
   let best = null;
@@ -356,17 +365,21 @@ function bestCounts(store, di, needFn){
   return best ? best.xs : T.map(() => mx);
 }
 /* Recommended headcount: fewest shifts that meet the need, then enough people for 5 shifts each. */
-function autoSlots(store, needFn, weightFn){
+function autoSlots(store, needFn, weightFn, noWeekend){
   const slots = [];
-  for (let di=0; di<7; di++){ const T = tpls(store, di), xs = bestCounts(store, di, needFn(di)); const arr = []; T.forEach((t,j) => { for (let x=0; x<xs[j]; x++) arr.push(t.k); }); slots.push(arr); }
+  for (let di=0; di<7; di++){ const T = autoT(store, di), xs = bestCounts(store, di, needFn(di)); const arr = []; T.forEach((t,j) => { for (let x=0; x<xs[j]; x++) arr.push(t.k); }); slots.push(arr); }
   const total = slots.reduce((a,s) => a + s.length, 0);
-  const N = Math.max(Math.ceil(total / 5), ...slots.map(s => s.length));
-  let extra = 5*N - total;
+  /* Everyone works Saturday and Sunday, so the weekday need has to fit in the other workdays. */
+  const WE = noWeekend ? [] : [5,6].filter(di => !dayInfo(store, di).closed);
+  const wkday = slots.reduce((a,s,di) => a + (WE.includes(di) ? 0 : s.length), 0);
+  const N = Math.max(Math.ceil(total / 5), ...slots.map(s => s.length), WE.length ? Math.ceil(wkday / (5 - WE.length)) : 0);
+  WE.forEach(di => fillDay(store, di, slots, N, weightFn));
+  let extra = 5*N - slots.reduce((a,s) => a + s.length, 0);
   while (extra-- > 0){
     let best = null;
     for (let di=0; di<7; di++){
       if (slots[di].length >= N) continue;
-      tpls(store, di).forEach(t => {
+      autoT(store, di).forEach(t => {
         let sc = 0; const d = dayInfo(store, di);
         for (let h=d.open; h<d.close; h++){ if (!onFloor(t,h)) continue; const cov = slots[di].filter(k => onFloor(tplOf(store,di,k), h)).length; sc += weightFn(di,h) / (cov + 1); }
         if (!best || sc > best.sc) best = {sc, di, k:t.k};
@@ -377,15 +390,25 @@ function autoSlots(store, needFn, weightFn){
   }
   return {N, slots};
 }
-/* Fixed headcount: hand out 5 shifts per person, filling the busiest short hours first. */
-function fixedSlots(store, N, needFn, weightFn){
+/* Top a day up to n shifts, each one where it adds the most coverage for the traffic. */
+function fillDay(store, di, slots, n, weightFn, needFn){
+  const d = dayInfo(store, di), nf = needFn ? needFn(di) : () => 0;
+  while (slots[di].length < n){ let best = null;
+    autoT(store, di).forEach(t => { let sc = 0;
+      for (let h=d.open; h<d.close; h++){ if (!onFloor(t,h)) continue; const cov = slots[di].filter(k => onFloor(tplOf(store,di,k), h)).length, w = weightFn(di,h); sc += cov < nf(h) ? 100 + 10*w : w / (cov + 1); }
+      if (!best || sc > best.sc) best = {sc, k:t.k}; });
+    if (!best) break; slots[di].push(best.k); }
+}
+/* Fixed headcount: hand out 5 shifts per person, filling the busiest short hours first. Weekends first: everyone works them. */
+function fixedSlots(store, N, needFn, weightFn, noWeekend){
   const slots = [[],[],[],[],[],[],[]];
-  for (let n=0; n<5*N; n++){
+  if (!noWeekend) [5,6].filter(di => !dayInfo(store, di).closed).forEach(di => fillDay(store, di, slots, N, weightFn, needFn));
+  for (let n=slots.reduce((a,s) => a + s.length, 0); n<5*N; n++){
     let best = null;
     for (let di=0; di<7; di++){
       if (slots[di].length >= N) continue;
       const d = dayInfo(store, di), nf = needFn(di);
-      tpls(store, di).forEach(t => {
+      autoT(store, di).forEach(t => {
         let sc = 0;
         for (let h=d.open; h<d.close; h++){
           if (!onFloor(t,h)) continue;
@@ -402,19 +425,27 @@ function fixedSlots(store, N, needFn, weightFn){
 }
 function assignSlots(store, plan, roles, names, presets, cap){
   cap = cap || 5;
-  const {N, slots} = plan;
+  const {N} = plan, slots = plan.slots.map(a => a.slice());
   const people = Array.from({length:N}, (_,i) => ({name:names[i], role:roles[i], days:(presets && presets[i]) ? presets[i].slice() : Array(7).fill(""), pref:{}}));
-  const order = [0,1,2,3,4,5,6].sort((a,b) => slots[b].length - slots[a].length);
+  /* Weekends are mandatory: make sure Saturday and Sunday have a shift for every sales person who isn't on PTO. */
+  const WE = [5,6].filter(di => !dayInfo(store, di).closed);
+  const used = [...new Set(plan.slots.flat())];
+  WE.forEach(di => {
+    const want = people.filter(p => wkndReq(p.role) && !p.days[di]).length;
+    const keys = used.filter(k => tplOf(store, di, k)); if (!keys.length) autoT(store, di).forEach(t => keys.push(t.k));
+    while (slots[di].length < want && keys.length){ const k = keys.slice().sort((a,b) => slots[di].filter(x => x===a).length - slots[di].filter(x => x===b).length)[0]; slots[di].push(k); }
+  });
+  const order = [0,1,2,3,4,5,6].sort((a,b) => (WE.includes(b) - WE.includes(a)) || (slots[b].length - slots[a].length));
   order.forEach(di => {
     slots[di].slice().sort().forEach(k => {
       const cand = people.filter(p => !p.days[di] && p.days.filter(Boolean).length < cap)
-        .sort((a,b) => (a.days.filter(Boolean).length - b.days.filter(Boolean).length) || ((b.pref[k]||0) - (a.pref[k]||0)));
+        .sort((a,b) => (WE.includes(di) ? (wkndReq(b.role) - wkndReq(a.role)) : 0) || (a.days.filter(Boolean).length - b.days.filter(Boolean).length) || ((b.pref[k]||0) - (a.pref[k]||0)));
       if (!cand.length){
         /* Nobody free that day: hand one of B's other shifts to someone with room (A), so B can take this one. Coverage stays the same. */
         const cnt = p => p.days.filter(Boolean).length;
         for (const A of people.filter(p => cnt(p) < cap)){
           for (let d2=0; d2<7; d2++){ if (A.days[d2]) continue;
-            const B = people.find(q => q !== A && q.days[d2] && q.days[d2] !== "PTO" && !q.days[di]);
+            const B = people.find(q => q !== A && q.days[d2] && q.days[d2] !== "PTO" && !q.days[di] && !(WE.includes(d2) && wkndReq(q.role)));
             if (B){ A.days[d2] = B.days[d2]; B.days[d2] = ""; B.days[di] = k; return; } }
         }
         return;
@@ -425,7 +456,50 @@ function assignSlots(store, plan, roles, names, presets, cap){
   people.forEach(p => delete p.pref);
   return people;
 }
-const TEAM_FIELDS = [["C","Full-time consultants"],["pt","Part-time (each counts ½)"],["GM","General Managers"],["L","Asst General Managers"],["LSL","Lead Selling Leaders"],["ASL","Asst Selling Leaders"],["KH","Key Holders"]];
+/* Leaders: fixed days off. GMs are off Wednesday and Thursday. Other leaders take Mon/Tue, Tue/Wed or Thu/Fri,
+   whichever keeps a leader in the store most. Everyone works the weekend. Then each day's leaders get the shifts that
+   keep someone in the building every open hour (a lone leader at a 7 PM store works 9:30 to 7). */
+const LEAD_OFF = [[0,1],[1,2],[3,4]];
+function coverSet(store, di, n){
+  const d = dayInfo(store, di), hrs = []; for (let h=d.open; h<d.close; h++) hrs.push(h);
+  const T = autoT(store, di), F = tpls(store, di).find(t => t.manual);
+  if (n === 1 && F) return [F.k];
+  let best = null;
+  const pick = (i, cur) => { if (cur.length === n || i === T.length){ if (!cur.length) return; const hit = hrs.filter(h => cur.some(t => inStore(t, h))).length;
+      if (!best || hit > best.hit || (hit === best.hit && cur.length < best.set.length)) best = {hit, set:cur.slice()}; return; }
+    pick(i+1, cur.concat([T[i]])); pick(i+1, cur); };
+  pick(0, []);
+  return best ? best.set.map(t => t.k) : [];
+}
+function leaderPlan(store, roles, names, presets, w){
+  const people = roles.map((r,i) => ({name:names[i], role:r, days:(presets && presets[i]) ? presets[i].slice() : Array(7).fill("")}));
+  const open = [0,1,2,3,4,5,6].map(di => !dayInfo(store, di).closed);
+  const need = [0,1,2,3,4,5,6].map(di => { if (!open[di]) return 0; const d = dayInfo(store, di), hrs = []; for (let h=d.open; h<d.close; h++) hrs.push(h);
+    const one = coverSet(store, di, 1).map(k => tplOf(store, di, k)); return hrs.every(h => one.some(t => inStore(t, h))) ? 1 : 2; });
+  const offOf = people.map(() => null), here = [0,1,2,3,4,5,6].map(() => 0);
+  people.forEach((p,i) => { if (p.role === "GM") offOf[i] = [2,3]; });
+  const count = () => { here.fill(0); people.forEach((p,i) => { for (let di=0; di<7; di++) if (open[di] && p.days[di] !== "PTO" && offOf[i] && !offOf[i].includes(di)) here[di]++; }); };
+  /* Try every combination of day-off pairs (small teams) and keep the one with the fewest short leader days, then the most even spread. */
+  const free = people.map((p,i) => i).filter(i => !offOf[i]);
+  const score = () => { count(); let sc = 0; for (let di=0; di<5; di++) if (open[di]) sc += 1000 * Math.max(0, need[di] - here[di]) + here[di] * here[di]; return sc; };
+  if (free.length && free.length <= 7){
+    let best = null; const combo = Array(free.length).fill(0);
+    for (let n=0; n < Math.pow(3, free.length); n++){ let x = n; free.forEach((i,j) => { combo[j] = x % 3; x = Math.floor(x / 3); offOf[i] = LEAD_OFF[combo[j]]; });
+      const sc = score(); if (!best || sc < best.sc) best = {sc, c:combo.slice()}; }
+    free.forEach((i,j) => offOf[i] = LEAD_OFF[best.c[j]]);
+  } else free.forEach(i => { let best = null; LEAD_OFF.forEach(o => { offOf[i] = o; const sc = score(); if (!best || sc < best.sc) best = {sc, o}; }); offOf[i] = best.o; });
+  for (let di=0; di<7; di++){ if (!open[di]) continue;
+    const P = people.filter((p,i) => p.days[di] !== "PTO" && !offOf[i].includes(di));
+    if (!P.length) continue;
+    const keys = coverSet(store, di, Math.min(P.length, autoT(store, di).length));
+    while (keys.length < P.length){ const d = dayInfo(store, di); let bk = null;
+      autoT(store, di).forEach(t => { let sc = 0; for (let h=d.open; h<d.close; h++) if (onFloor(t,h)) sc += w(di,h) / (1 + keys.filter(k => onFloor(tplOf(store,di,k), h)).length); if (!bk || sc > bk.sc) bk = {sc, k:t.k}; });
+      keys.push(bk.k); }
+    P.forEach((p,x) => p.days[di] = keys[x]);
+  }
+  return people;
+}
+const TEAM_FIELDS = [["C","Full-time consultants"],["pt","Part-time (each counts ½)"],["GM","General Managers"],["L","Asst General Managers"],["LSL","Lead Selling Leaders"],["ASL","Asst Selling Leaders"],["KH","Key Holders"],["CSR","CSRs (not counted in coverage)"]];
 function teamOf(store){ return TEAMS[store] || (TEAMS[store] = {}); }
 const blank = v => v === "" || v == null || isNaN(v);
 function recommended(store){ return withWeek(FUTURE, () => recommended0(store)); }
@@ -437,17 +511,17 @@ function recommended0(store){
   if (slotted){
     // Leadership slots come from the staffing report (Goal column): that's what the store is slotted for.
     lroles = []; [["GM","goalGM"],["L","goalL"],["LSL","goalLSL"],["ASL","goalASL"],["KH","goalKH"]].forEach(([r,k]) => { for (let i=0; i<(+tm[k]||0); i++) lroles.push(r); });
-    leads = lroles.length ? assignSlots(store, fixedSlots(store, lroles.length, di => h => 1, w), lroles, lroles.map(r => ROLES[r])) : [];
+    leads = lroles.length ? leaderPlan(store, lroles, lroles.map(r => ROLES[r]), null, w) : [];
   } else {
-    const lp = autoSlots(store, di => h => 1, w);
+    const lp = autoSlots(store, di => h => 1, w, true);
     let wkG = 0; for (let di=0; di<7; di++){ const d = dayInfo(store,di); for (let h=d.open; h<d.close; h++) wkG += guests(store,di,h) || 0; }
     const order = wkG >= 230 ? ["L","ASL","LSL","KH"] : ["ASL","LSL","KH","KH"]; // AGM only where traffic supports it
     lroles = Array.from({length:lp.N}, (_,i) => order[Math.min(i,3)]);
-    leads = assignSlots(store, lp, lroles, lroles.map(r => ROLES[r]));
+    leads = leaderPlan(store, lroles, lroles.map(r => ROLES[r]), null, w);
   }
   const sellCov = (di,h) => leads.filter(p => isCounted(p) && p.days[di] && onFloor(tplOf(store,di,p.days[di]), h)).length;
   const cp = autoSlots(store, di => h => Math.max(0, need(guests(store,di,h), store, di, h) - sellCov(di,h)), w);
-  const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0}; lroles.forEach(r => counts[r]++);
+  const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0, CSR:0}; lroles.forEach(r => counts[r]++);
   return {counts, leads, cp, slotted};
 }
 function suggest(store, week, raw){
@@ -462,9 +536,8 @@ function suggest(store, week, raw){
   const leadGiven = ["GM","L","LSL","ASL","KH"].some(k => !blank(team[k]));
   const roles = []; ["GM","L","LSL","ASL","KH"].forEach(k => { const n = leadGiven ? (blank(team[k]) ? rec.counts[k] : (+team[k]||0)) : rec.counts[k]; for (let x=0; x<n; x++) roles.push(k); });
   const rc = {}; const lidx = roles.map(r => (rc[r] = (rc[r]||0) + 1) - 1);
-  const lplan = fixedSlots(store, roles.length, di => h => 1, w);
-  const leads = roles.length ? assignSlots(store, {N:roles.length, slots:lplan.slots}, roles,
-    roles.map((r,x) => nameFor(r, lidx[x], ROLES[r] + (lidx[x] > 0 ? " " + (lidx[x]+1) : ""))), roles.map((r,x) => ptoFor(r, lidx[x]))) : [];
+  const leads = roles.length ? leaderPlan(store, roles,
+    roles.map((r,x) => nameFor(r, lidx[x], ROLES[r] + (lidx[x] > 0 ? " " + (lidx[x]+1) : ""))), roles.map((r,x) => ptoFor(r, lidx[x])), w) : [];
   const on = (list, di, h) => list.reduce((a,p) => a + (isCounted(p) && p.days[di] && p.days[di] !== "PTO" && onFloor(tplOf(store,di,p.days[di]), h) ? 1 : 0), 0);
   const nf = di => h => Math.max(0, need(guests(store,di,h), store, di, h) - on(leads, di, h));
   const cplan = blank(team.C) ? autoSlots(store, nf, w) : fixedSlots(store, +team.C, nf, w);
@@ -499,7 +572,10 @@ function suggest(store, week, raw){
     nhs = assignSlots(store, plan, srcNH.map(p => p.role), srcNH.map(p => p.name), srcNH.map(p => { const same = cur.find(q => q.nh && q.name === p.name); return same ? same.days.map(k => k === "PTO" ? "PTO" : "") : null; }));
     nhs.forEach((p, x) => { p.nh = true; p.nhStart = srcNH[x].nhStart || wk; });
   }
-  const all = cons.concat(pts, nhs, leads);
+  /* CSRs: scheduled 5 days on the busiest days, never counted toward sales coverage, no weekend requirement. */
+  const csrN = blank(team.CSR) ? 0 : Math.max(0, +team.CSR);
+  const csrs = csrN ? assignSlots(store, fixedSlots(store, csrN, di => h => 0, w, true), Array(csrN).fill("CSR"), Array.from({length:csrN}, (_,x) => nameFor("CSR", x, "CSR " + (x+1))), Array.from({length:csrN}, (_,x) => ptoFor("CSR", x))) : [];
+  const all = cons.concat(pts, nhs, leads, csrs);
   if (raw) return all;
   return fillLunches(store, optimizeWeek(store, all).people);
 }
@@ -510,7 +586,7 @@ function minLeaderShifts(store){
   let tot = 0;
   for (let di=0; di<7; di++){
     const d = dayInfo(store, di); if (d.closed) continue;
-    const T = tpls(store, di), hrs = []; for (let h=d.open; h<d.close; h++) hrs.push(h);
+    const T = autoT(store, di), hrs = []; for (let h=d.open; h<d.close; h++) hrs.push(h);
     let best = T.length + 1;
     for (let m=1; m < (1 << T.length); m++){ const pick = T.filter((_,j) => m & (1<<j)); if (pick.length < best && hrs.every(h => pick.some(t => inStore(t, h)))) best = pick.length; }
     tot += best > T.length ? T.length : best;
@@ -560,7 +636,7 @@ function wlbSummary(store, r){
    Goals: talent mix (High in hot zones, new hires paired) and work-life balance (days off together, no close-then-open). */
 function optimizeWeek(store, people){
   const r = {people};
-  const grp = p => p.role === "C" ? "C" + (nhActive(p) ? "t" : "") : p.role === "PT" ? "PT" : ["LSL","ASL","KH"].includes(p.role) ? "SL" : "NL";
+  const grp = p => p.role === "C" ? "C" + (nhActive(p) ? "t" : "") : p.role === "PT" ? "PT" : p.role === "CSR" ? "CSR" : ["LSL","ASL","KH"].includes(p.role) ? "SL" : "NL";
   const pay = (di, k) => { const t = k && k !== "PTO" && tplOf(store, di, k); return t ? paid(t) : null; };
   const groups = {}; people.forEach(p => (groups[grp(p)] = groups[grp(p)] || []).push(p));
   const clearL = (p, ...ds) => { if (p.lunch) ds.forEach(d => p.lunch[d] = null); };
@@ -579,6 +655,8 @@ function optimizeWeek(store, people){
           for (const A of mov) for (const B of mov){ if (A === B) continue;
             const ka = A.days[di], kb = B.days[d2];
             if (!ka || ka === "PTO" || A.days[d2] || !kb || kb === "PTO" || B.days[di]) continue;
+            if ((di >= 5 && wkndReq(A.role)) || (d2 >= 5 && wkndReq(B.role))) continue;   // weekends stay covered
+            if (isLead(A.role)) continue;   // leaders keep their set days off
             if (pay(di, ka) !== pay(d2, kb)) continue;
             const before = mixCost(store, di, r) + mixCost(store, d2, r) + wlbCost(store, A) + wlbCost(store, B);
             A.days[di] = ""; A.days[d2] = kb; B.days[d2] = ""; B.days[di] = ka;
@@ -683,8 +761,18 @@ function renderRoster(){
   $("rosterWrap").classList.toggle("is-draft", !r.posted);
   const bad = (di, k) => k && k !== "PTO" && !tplOf(st, di, k);
   const tierSel = (p, i) => !sells(p.role) ? "" : `<select class="tsel t-${tierOf(st, p) || "none"}" data-ti="${i}" aria-label="${esc(p.name)} performance">${[["","Rate: not rated"],["H","High performer"],["M","Middle performer"],["L","Low performer"]].map(([v,l]) => `<option value="${v}" ${tierOf(st,p)===v?"selected":""}>${l}</option>`).join("")}</select>`;
-  const opt = (di, k) => (bad(di,k) ? `<option value="${k}" selected>Pick a shift</option>` : "") + `<option value="" ${!k?"selected":""}>Off</option>` + tpls(st,di).map(t => `<option value="${t.k}" ${t.k===k?"selected":""}>${clock(t.in)}-${clock(t.out)}</option>`).join("")
-    + `<option value="P" ${k==="P"?"selected":""}>${clock(PT_T.in)}-${clock(PT_T.out)}</option><option value="PTO" ${k==="PTO"?"selected":""}>PTO</option>`;
+  const opt = (di, k) => { const x = isX(k) && tplOf(st, di, k);
+    return (bad(di,k) ? `<option value="${esc(k)}" selected>Pick a shift</option>` : "") + `<option value="" ${!k?"selected":""}>Off</option>`
+    + (x ? `<option value="${esc(k)}" selected>${clock(x.in)}-${clock(x.out)}*</option>` : "")
+    + tpls(st,di).map(t => `<option value="${t.k}" ${t.k===k?"selected":""}>${clock(t.in)}-${clock(t.out)}</option>`).join("")
+    + `<option value="P" ${k==="P"?"selected":""}>${clock(PT_T.in)}-${clock(PT_T.out)}</option><option value="PTO" ${k==="PTO"?"selected":""}>PTO</option>`
+    + (k && k !== "PTO" && !bad(di,k) ? `<option value="__adj">Adjust hours…</option>` : ""); };
+  const kc = k => isX(k) ? "X" : k;
+  /* Adjust hours: start and end pickers in 15-minute steps, starting from the shift the leader picked. */
+  const adjSel = (p, i, di) => { const k = p.days[di]; if (!isX(k)) return ""; const t = tplOf(st, di, k); if (!t) return ""; const d = dayInfo(st, di);
+    const ins = [], outs = []; for (let v = d.open - 1.5; v <= d.close - 2 + 1e-9; v += 0.25) ins.push(v); for (let v = t.in + 2; v <= d.close + 1 + 1e-9; v += 0.25) outs.push(v);
+    const o = (arr, cur) => arr.map(v => `<option value="${v}" ${Math.abs(v-cur) < 1e-9 ? "selected" : ""}>${clock(v)}</option>`).join("");
+    return `<div class="adj"><select data-ai="${i}" data-ad="${di}" data-ae="in" aria-label="${esc(p.name)} ${DAYFULL[di]} start">${ins.map(v => `<option value="${v}" ${Math.abs(v-t.in) < 1e-9 ? "selected" : ""}>In ${clock(v)}</option>`).join("")}</select><select data-ai="${i}" data-ad="${di}" data-ae="out" aria-label="${esc(p.name)} ${DAYFULL[di]} end">${outs.map(v => `<option value="${v}" ${Math.abs(v-t.out) < 1e-9 ? "selected" : ""}>Out ${clock(v)}</option>`).join("")}</select></div>`; };
   const lunchSel = (p, i, di) => { const k = p.days[di], t = k && k !== "PTO" && tplOf(st, di, k); if (!hasLunch(t)) return "";
     const cur = p.lunch && p.lunch[di];
     return `<select class="lsel" data-li="${i}" data-ld="${di}" aria-label="${esc(p.name)} ${DAYFULL[di]} lunch" title="Lunch time">${lunchOpts(t).map(x => `<option value="${x}" ${cur != null && Math.abs(cur-x) < 1e-9 ? "selected" : ""}>Lunch ${clock(x)}</option>`).join("")}</select>`; };
@@ -697,7 +785,7 @@ function renderRoster(){
     return `<tr class="${act ? "nhrow" : ph === "tagged" ? "nhtag" : ""}"><td class="nm"><input id="nm${i}" data-i="${i}" value="${esc(p.name)}" placeholder="Type a name" aria-label="Name" title="Click to type this person's name">${nhLab}</td>
       <td class="rl"><select id="rl${i}" data-i="${i}" aria-label="Role">${Object.entries(ROLES).map(([k,v]) => `<option value="${k}" ${p.role===k?"selected":""}>${v}</option>`).join("")}</select>${tierSel(p, i)}</td>
       ${p.days.map((k,di) => dayInfo(st, di).closed ? `<td class="dy"><div class="mshift k-closed">Closed</div></td>`
-        : `<td class="dy"><select id="d${i}_${di}" data-i="${i}" data-d="${di}" class="k-${bad(di,k) ? "bad" : k}" aria-label="${esc(p.name)} ${DAYFULL[di]}">${opt(di,k)}</select>${lunchSel(p, i, di)}</td>`).join("")}
+        : `<td class="dy"><select id="d${i}_${di}" data-i="${i}" data-d="${di}" class="k-${bad(di,k) ? "bad" : kc(k)}" aria-label="${esc(p.name)} ${DAYFULL[di]}">${opt(di,k)}</select>${adjSel(p, i, di)}${lunchSel(p, i, di)}</td>`).join("")}
       <td class="hrs h-${hs}">${hrs}<small>${lab}</small></td>
       <td><button class="icon-btn" data-del="${i}" aria-label="Remove ${esc(p.name)}" style="width:32px">✕</button></td></tr>`; };
   const idx = r.people.map((p,i) => ({p,i}));
@@ -705,17 +793,26 @@ function renderRoster(){
   const ld = idx.filter(x => isLead(x.p.role)).sort((a,b) => LEAD_ORDER.indexOf(a.p.role) - LEAD_ORDER.indexOf(b.p.role));
   const mirror = p => { const hrs = hoursOf(st, p), hs = statusOf(st, p);
     return `<tr class="mirror"><td class="nm"><div class="mname">${esc(p.name)}</div></td><td class="rl"><span class="mrole">${ROLES[p.role]}<small>selling + leading${tierOf(st,p) ? ` · <b class="tchip t-${tierOf(st,p)}">${TIERS[tierOf(st,p)]}</b>` : " · not rated"}</small></span></td>
-      ${p.days.map((k,di) => { const t = k && k !== "PTO" && tplOf(st,di,k); return `<td class="dy"><div class="mshift k-${dayInfo(st,di).closed ? "closed" : k}">${dayInfo(st,di).closed ? "Closed" : t ? clock(t.in)+"-"+clock(t.out) : (k==="PTO" ? "PTO" : k ? "Pick a shift" : "Off")}${t && hasLunch(t) && p.lunch && p.lunch[di] != null ? `<small>lunch ${clock(p.lunch[di])}</small>` : ""}</div></td>`; }).join("")}
+      ${p.days.map((k,di) => { const t = k && k !== "PTO" && tplOf(st,di,k); return `<td class="dy"><div class="mshift k-${dayInfo(st,di).closed ? "closed" : kc(k)}">${dayInfo(st,di).closed ? "Closed" : t ? clock(t.in)+"-"+clock(t.out) : (k==="PTO" ? "PTO" : k ? "Pick a shift" : "Off")}${t && hasLunch(t) && p.lunch && p.lunch[di] != null ? `<small>lunch ${clock(p.lunch[di])}</small>` : ""}</div></td>`; }).join("")}
       <td class="hrs h-${hs}">${hrs}<small>${hrsLabel(st, p)}${ptoOf(p) ? " · " + ptoOf(p) + " PTO" : ""}</small></td><td></td></tr>`; };
   html += `<tr class="grp"><td colspan="11">Selling team · full-time target ${S.target} hrs · part-time about ${S.ptTarget} hrs · everyone who sells on the floor</td></tr>`
     + idx.filter(x => x.p.role==="C").map(x => row(x.p, x.i)).join("") + idx.filter(x => x.p.role==="PT").map(x => row(x.p, x.i)).join("") + ld.filter(x => sells(x.p.role)).map(x => mirror(x.p)).join("");
   html += `<tr class="grp"><td colspan="11">Leadership · leaders on the floor · edit selling leaders and key holders here</td></tr>` + ld.map(x => row(x.p, x.i)).join("");
+  const csr = idx.filter(x => x.p.role === "CSR");
+  if (csr.length) html += `<tr class="grp"><td colspan="11">CSR · scheduled but not counted toward sales coverage or leader in store</td></tr>` + csr.map(x => row(x.p, x.i)).join("");
   html += `</tbody><tfoot><tr><td style="text-align:left;background:transparent">Selling on the floor</td><td style="background:transparent"></td>${DAYS.map((_,di) => `<td>${r.people.filter(p => isCounted(p) && p.days[di] && p.days[di] !== "PTO").length}</td>`).join("")}<td></td><td style="background:transparent"></td></tr></tfoot>`;
   $("roster").innerHTML = html;
   if (!canWrite) $("roster").querySelectorAll("input,select,button").forEach(el => el.disabled = true);
   const redo = di => { fillLunches(st, r.people); };
   $("roster").querySelectorAll("input[data-i]:not([type=checkbox])").forEach(el => el.addEventListener("change", () => { const pp = r.people[+el.dataset.i], old = pp.name, tr = tierOf(st, pp); pp.name = el.value; if (tr && old !== el.value){ const m = PERF[st] || (PERF[st] = {}); delete m[old]; setTier(st, el.value, tr); } commit(st, S.week, r); renderAll(); }));
-  $("roster").querySelectorAll("select[data-d]").forEach(el => el.addEventListener("change", () => { const p = r.people[+el.dataset.i], di = +el.dataset.d; p.days[di] = el.value; if (p.lunch) p.lunch[di] = null; redo(di); commit(st, S.week, r); renderAll(); }));
+  $("roster").querySelectorAll("select[data-d]").forEach(el => el.addEventListener("change", () => { const p = r.people[+el.dataset.i], di = +el.dataset.d;
+    if (el.value === "__adj"){ const t = tplOf(st, di, p.days[di]); if (!t){ renderAll(); return; } p.days[di] = mkX(t.in, t.out); toast("Pick the start and end times under the shift"); }
+    else p.days[di] = el.value;
+    if (p.lunch) p.lunch[di] = null; redo(di); commit(st, S.week, r); renderAll(); }));
+  $("roster").querySelectorAll("select[data-ai]").forEach(el => el.addEventListener("change", () => { const p = r.people[+el.dataset.ai], di = +el.dataset.ad, t = tplOf(st, di, p.days[di]); if (!t) return;
+    let a = t.in, b = t.out; if (el.dataset.ae === "in") a = parseFloat(el.value); else b = parseFloat(el.value);
+    if (b < a + 2) b = a + 2;
+    p.days[di] = mkX(a, b); if (p.lunch) p.lunch[di] = null; redo(di); commit(st, S.week, r); renderAll(); }));
   $("roster").querySelectorAll("select[data-li]").forEach(el => el.addEventListener("change", () => { const p = r.people[+el.dataset.li]; if (!p.lunch) p.lunch = Array(7).fill(null); p.lunch[+el.dataset.ld] = parseFloat(el.value); commit(st, S.week, r); renderAll(); }));
   $("roster").querySelectorAll("input[data-nh]").forEach(el => el.addEventListener("change", () => { const p = r.people[+el.dataset.nh]; if (el.checked){ p.nh = true; p.nhStart = S.week; } else { delete p.nh; delete p.nhStart; } commit(st, S.week, r); renderAll(); toast(el.checked ? p.name + " marked as a new hire. Not counted toward coverage or staffing." : p.name + " now counts toward coverage and staffing."); }));
   $("roster").querySelectorAll("select[data-ti]").forEach(el => el.addEventListener("change", () => { const p = r.people[+el.dataset.ti]; setTier(st, p.name, el.value); renderAll(); }));
@@ -755,6 +852,8 @@ function renderCoverage(){
     ${(() => { const n = r.people.reduce((a,p) => a + p.days.filter(k => k==="PTO").length, 0); return `<div class="chip"><b>${n}</b><small>PTO ${n===1?"day":"days"} this week</small></div>`; })()}`;
 
   const tips = [];
+  const offWE = []; r.people.forEach(p => { if (!wkndReq(p.role)) return; [5,6].forEach(di => { if (!dayInfo(st, di).closed && !p.days[di]) offWE.push(p.name + " " + DAYS[di]); }); });
+  if (offWE.length) tips.push({c:"short", h:`Weekend: ${offWE.length} ${offWE.length===1?"day":"days"} off without PTO`, t:`${offWE.slice(0,8).join(", ")}${offWE.length>8?" and more":""}. Weekends are workdays for the whole sales team and leadership unless they're on PTO.`});
   cons.forEach(p => { const h = hoursOf(st,p), s = statusOf(st, p);
     if (p.role === "PT"){ if (s !== "ok") tips.push({c:"short", h:`${p.name} is at ${h} hours`, t:`Part-timers should land near ${S.ptTarget} (${S.ptTarget-4} to ${S.ptTarget+4}). ${s === "over" ? "Take away a shift." : "Add a Part-time shift on a busy day."}`}); return; }
     if (s === "under"){ const off = p.days.map((k,di) => k ? null : di).filter(x => x !== null);
@@ -812,6 +911,7 @@ function renderText(cov){
   r.people.filter(p => p.role==="C").forEach(p => lines.push(line(p)));
   r.people.filter(p => p.role==="PT").forEach(p => lines.push(line(p)));
   r.people.filter(p => isLead(p.role)).sort((a,b) => LEAD_ORDER.indexOf(a.role) - LEAD_ORDER.indexOf(b.role)).forEach(p => lines.push(line(p)));
+  r.people.filter(p => p.role === "CSR").forEach(p => lines.push(line(p)));
   const shorts = cov.flatMap((rows,di) => rows.filter(x => x.st==="short").map(x => `${DAYS[di]} ${fmt(x.h)}`));
   lines.push("", shorts.length ? "Short hours: " + shorts.join(", ") : "No short hours.");
   $("planText").value = lines.join("\n");
@@ -904,7 +1004,7 @@ function renderStatus(){
   $("weekHint").textContent = S.week === thisW ? "" : (S.week < thisW ? "Past week" : "Future week");
   $("copyLast").title = lastWeekOf(st, S.week) ? "Copy names, shifts and lunches from the week of " + weekLabel(lastWeekOf(st, S.week)) : "No earlier week saved yet";
   $("viewOnly").hidden = canWrite;
-  ["suggest","balance","clear","addC","addPT","addNH","addL","copyLast"].forEach(id => $(id).disabled = !canWrite);
+  ["suggest","balance","clear","addC","addPT","addNH","addL","addCSR","copyLast"].forEach(id => { if ($(id)) $(id).disabled = !canWrite; });
 }
 function renderNow(){ const n = storeNow(S.store); withWeek(n.week, () => renderNow0(n)); }
 function renderNow0(n){
@@ -1195,13 +1295,18 @@ $("suggest").addEventListener("click", () => { const k = rk(S.store, S.week), fr
   renderAll(); });
 $("clear").addEventListener("click", () => { const r = roster(S.store); r.people.forEach(p => p.days = Array(7).fill("")); commit(S.store, S.week, r); renderAll(); toast("Week cleared"); });
 function add(role, nh){ const r = roster(S.store); const n = (nh ? r.people.filter(p => p.nh).length : r.people.filter(p => p.role===role).length) + 1;
-  const np = {name:nh ? "New hire " + n : ({L:"Leader ", PT:"Part-timer "}[role] || "Consultant ") + n, role, days:Array(7).fill(""), lunch:Array(7).fill(null)};
+  const np = {name:nh ? "New hire " + n : ({L:"Leader ", PT:"Part-timer ", CSR:"CSR "}[role] || "Consultant ") + n, role, days:Array(7).fill(""), lunch:Array(7).fill(null)};
   if (nh){ np.nh = true; np.nhStart = S.week; }
   r.people.push(np); commit(S.store, S.week, r); renderAll();
   const el = $("nm" + (r.people.length-1)); if (el){ el.focus(); el.select(); } }
 $("addC").addEventListener("click", () => add("C"));
 $("addL").addEventListener("click", () => add("L"));
 $("addPT").addEventListener("click", () => add("PT"));
+(() => { if ($("addCSR")) return; const b = document.createElement("button"); b.className = "btn ghost"; b.id = "addCSR"; b.textContent = "+ Add CSR"; $("addL").after(b); b.addEventListener("click", () => add("CSR"));
+  const st = document.createElement("style"); st.textContent = `.roster td.dy select.k-X,.mshift.k-X{background:#FFF4E6;color:#8A4B0F;border-color:#F68C2C}
+  .roster td.dy select.k-F,.mshift.k-F{background:#DBECF1;color:#003B4A;border-color:#3F738D} .tag.F{background:#DBECF1;color:#003B4A} .tag.X{background:#FFF4E6;color:#8A4B0F}
+  .roster td.dy .adj{display:flex;flex-direction:column;gap:2px;margin-top:3px} .roster td.dy .adj select{min-width:0;width:100%;font-size:11px;padding:3px 1px;border:1px solid #F68C2C;border-radius:5px;background:var(--surface);color:var(--ink);font-weight:600}
+  :root[data-theme="dark"] .roster td.dy select.k-X{background:#4A2E12;color:#FCD9B4} @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .roster td.dy select.k-X{background:#4A2E12;color:#FCD9B4}}`; document.head.appendChild(st); })();
 $("addNH").addEventListener("click", () => add("C", true));
 $("calAdd").addEventListener("click", () => { CAL_EDIT = CAL_EDIT || clone(CAL.events || []); CAL_EDIT.push({date:"", name:"", open:null, close:null, earlier:0, lift:1, stores:{}}); renderCal(); });
 $("calSave").addEventListener("click", saveCal);
