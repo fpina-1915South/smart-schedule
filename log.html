@@ -1,0 +1,191 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>1915 South Visit Log</title><meta name="theme-color" content="#003B4A">
+<style>
+:root{--navy:#003B4A;--navy2:#3F738D;--orange:#F68C2C;--icy:#DBECF1;--bg:#EDEDED;--card:#fff;--ink:#1E2A30;--muted:#595959;--line:#DDE3E4;--pass:#2E9E6A;--need:#C4562F;--part:#D79A28;}
+*{box-sizing:border-box}html,body{margin:0}
+body{font-family:Aptos,Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+header{background:var(--navy);color:#fff;padding:12px 16px;position:sticky;top:0;z-index:10}
+.brand{font-weight:800;font-size:16px}.brand em{color:var(--orange);font-style:normal}
+.brand small{display:block;font-weight:500;font-size:10.5px;letter-spacing:2px;color:#AEC2C9}
+.hrow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+#acct{font-size:11.5px;color:#AEC2C9;text-align:right}#acct a{color:#fff}
+main{max-width:980px;margin:0 auto;padding:12px 16px 60px}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-top:12px;box-shadow:0 1px 3px rgba(16,40,50,.1)}
+h2{margin:0 0 8px;font-size:16px;color:var(--navy)}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.filters label{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);display:block;margin-bottom:2px}
+input,select,button{font-family:inherit;font-size:14px}
+.filters input,.filters select{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.stat{background:var(--icy);border-radius:10px;padding:8px 12px;min-width:110px}.stat b{display:block;font-size:20px;color:var(--navy)}.stat span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.vrow{display:grid;grid-template-columns:92px 1fr 64px;gap:10px;align-items:center;padding:11px 4px;border-top:1px solid var(--line);cursor:pointer}
+.vrow:hover{background:#F6F9FA}.vrow .st{font-weight:700}.vrow .sub{font-size:12px;color:var(--muted)}
+.pill{display:inline-block;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;background:var(--icy);color:var(--navy);margin-right:4px}
+.pct{font-size:18px;font-weight:800;text-align:right;color:var(--navy)}
+.btn{border:none;border-radius:9px;padding:10px 14px;font-weight:800;background:var(--navy);color:#fff;cursor:pointer}
+.btn.alt{background:#fff;color:var(--navy);border:1.5px solid var(--navy)}.btn:disabled{opacity:.5}
+.muted{color:var(--muted);font-size:13px}
+.meter{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:6px 0}.meter i{display:block;height:100%;background:var(--navy2)}
+.drop{border:1.5px dashed #B9C6C9;border-radius:10px;padding:12px;margin-top:8px;background:#FAFCFC}
+.drop label{font-weight:700;font-size:13px;display:block;margin-bottom:4px}
+.ok{color:var(--pass);font-weight:700}.bad{color:var(--need);font-weight:700}
+/* detail */
+#detail{display:none}
+.dsec{margin-top:12px}.dsec h3{margin:0 0 6px;font-size:14px;color:var(--navy);text-transform:uppercase;letter-spacing:.4px}
+.chk{display:flex;gap:8px;padding:4px 0;border-top:1px solid #EEF1F2;font-size:13.5px}.chk b{min-width:62px;font-size:11px;padding-top:2px}
+.yes{color:var(--pass)}.partial{color:var(--part)}.no{color:var(--need)}
+.note{background:#F6F8F9;border-radius:8px;padding:8px 10px;margin:6px 0;font-size:13.5px;white-space:pre-wrap}
+.win{background:#FFF7EF;border-left:4px solid var(--orange)}
+.photos{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.photos img{width:140px;height:140px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.kgrid div{background:#F6F8F9;border-radius:8px;padding:6px 8px;font-size:12px}.kgrid b{display:block;font-size:14px}
+@media print{header,.noprint,#listview{display:none!important}body{background:#fff}.card{box-shadow:none;padding:0}#detail{display:block!important}.photos img{width:180px;height:180px}}
+</style></head><body>
+<header><div class="hrow"><div class="brand">1915 <em>South</em><small>VISIT LOG</small></div><div id="acct"></div></div></header>
+<main>
+<div id="signin" class="card" style="display:none"><h2>Sign in first</h2><p class="muted">Open the <a href="index.html">Store Visit app</a>, sign in with your 1915 South email, then tap "Visit log".</p></div>
+
+<div id="listview" style="display:none">
+  <div id="admin" class="card" style="display:none">
+    <h2>Daily numbers</h2>
+    <p class="muted" style="margin:0">Drop in the morning files. The app reads them and every director sees the new numbers.</p>
+    <div class="drop"><label>1. Daily report CSV (from the 6 AM analytics email)</label><input type="file" id="fStore" accept=".csv,text/csv"><div id="rStore" class="muted"></div></div>
+    <div class="drop"><label>2. Consultant CSV (from the analytics page)</label><input type="file" id="fRsa" accept=".csv,text/csv"><div id="rRsa" class="muted"></div></div>
+    <button class="btn" id="saveNums" style="margin-top:10px" disabled>Save numbers for everyone</button>
+    <div id="numStatus" class="muted" style="margin-top:6px"></div>
+    <h2 style="margin-top:18px">Free storage</h2>
+    <div class="meter"><i id="meterBar" style="width:0"></i></div><div id="meterTxt" class="muted"></div>
+    <button class="btn alt" id="clearOld" style="margin-top:8px">Clear photos from visits older than 90 days</button>
+    <div id="clearMsg" class="muted" style="margin-top:6px"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="listTitle">Visits</h2>
+    <div class="filters">
+      <div><label>Store</label><select id="qStore"><option value="">All stores</option></select></div>
+      <div><label>Director</label><select id="qDir"><option value="">All directors</option></select></div>
+      <div><label>From</label><input type="date" id="qFrom"></div>
+      <div><label>To</label><input type="date" id="qTo"></div>
+      <div><label>Search notes</label><input type="search" id="qText" placeholder="Word or name"></div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div id="list" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div id="detail" class="card"></div>
+</main>
+<script src="shared.js"></script>
+<script type="module">
+import API from './api.js';
+const $=id=>document.getElementById(id);
+let VISITS=[], PARSED={store:null,rsa:null};
+const TAG={yes:'YES',partial:'PARTIAL',no:'NO',pass:'MEETS',needs:'NEEDS WORK'};
+
+API.onUser(async(u,info)=>{
+  if(!u){$('signin').style.display='block';$('listview').style.display='none';$('acct').innerHTML='';return;}
+  $('signin').style.display='none';$('listview').style.display='block';
+  $('acct').innerHTML=escA(u.email)+'<br><a href="index.html">Store Visit app</a>';
+  if(info.isAdmin){$('admin').style.display='block';$('listTitle').textContent='All visits';}else $('listTitle').textContent='My visits';
+  await load();
+});
+
+async function load(){
+  $('list').innerHTML='<div class="muted">Loading…</div>';
+  try{VISITS=await API.listVisits();}catch(e){$('list').innerHTML='<div class="bad">Could not load visits: '+escA(e.message)+'</div>';return;}
+  VISITS.sort((a,b)=>String(b.header?.vdate||'').localeCompare(String(a.header?.vdate||''))||((b.submittedAt||0)-(a.submittedAt||0)));
+  const stores=[...new Set(VISITS.map(v=>v.header?.store).filter(Boolean))].sort();
+  const dirs=[...new Set(VISITS.map(v=>v.header?.director||v.email).filter(Boolean))].sort();
+  $('qStore').innerHTML='<option value="">All stores</option>'+stores.map(s=>`<option>${escA(s)}</option>`).join('');
+  $('qDir').innerHTML='<option value="">All directors</option>'+dirs.map(s=>`<option>${escA(s)}</option>`).join('');
+  meter(); render();
+}
+['qStore','qDir','qFrom','qTo','qText'].forEach(id=>$(id).addEventListener('input',render));
+
+function filtered(){
+  const st=$('qStore').value,d=$('qDir').value,f=$('qFrom').value,t=$('qTo').value,q=$('qText').value.trim().toLowerCase();
+  return VISITS.filter(v=>{const h=v.header||{};
+    if(st&&h.store!==st)return false; if(d&&(h.director||v.email)!==d)return false;
+    if(f&&(h.vdate||'')<f)return false; if(t&&(h.vdate||'')>t)return false;
+    if(q&&!JSON.stringify(v).toLowerCase().includes(q))return false; return true;});
+}
+function render(){
+  const L=filtered();
+  const scores=L.map(v=>v.summary?.overall).filter(x=>x!=null);
+  const avg=scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length):null;
+  const levers=L.reduce((a,v)=>{const k=v.summary?.lever;if(k)a[k]=(a[k]||0)+1;return a;},{});
+  $('stats').innerHTML=`<div class="stat"><b>${L.length}</b><span>Visits</span></div><div class="stat"><b>${avg==null?'—':avg+'%'}</b><span>Avg visit score</span></div>
+    <div class="stat"><b>${levers.close||0} / ${levers.tkt||0}</b><span>Close rate / Ticket lever</span></div>`;
+  $('list').innerHTML=L.length?L.map(v=>{const h=v.header||{},s=v.summary||{};
+    return `<div class="vrow" data-id="${v.id}"><div><div class="st">${escA(fmtDate(h.vdate))}</div><div class="sub">${escA(h.vtype||'')}</div></div>
+      <div><div class="st">${escA(h.store||'')}</div><div class="sub">${escA(h.director||v.email||'')}${s.lever?' · <span class="pill">'+(s.lever==='close'?'Close Rate':'Avg Ticket')+'</span>':''}${v.photoCount?' · '+v.photoCount+' photos':''}</div></div>
+      <div class="pct">${s.overall==null?'—':s.overall+'%'}</div></div>`;}).join(''):'<div class="muted" style="padding:10px 0">No visits match.</div>';
+}
+$('list').addEventListener('click',e=>{const r=e.target.closest('.vrow');if(r)openVisit(r.dataset.id);});
+
+async function openVisit(id){
+  const v=VISITS.find(x=>x.id===id);if(!v)return;
+  const h=v.header||{},s=v.summary||{};const d=$('detail');
+  const chk=(checks,items)=>items.map((t,i)=>{const x=(checks||{})[i];return `<div class="chk"><b class="${x||''}">${x?TAG[x]:'—'}</b><span>${escA(t)}</span></div>`;}).join('');
+  const note=(t,cls='')=>t&&String(t).trim()?`<div class="note ${cls}">${escA(t)}</div>`:'';
+  const el=v.el||{},misc=v.misc||{};
+  let html=`<div class="noprint" style="display:flex;gap:8px;margin-bottom:10px"><button class="btn alt" id="back">← Back</button><button class="btn" onclick="print()">Save PDF</button></div>
+  <h2 style="font-size:19px">${escA(h.store||'')}</h2><div class="muted">${escA(fmtDate(h.vdate))} · ${escA(h.director||v.email||'')} · ${escA(h.vtype||'')}</div>
+  <div class="stats"><div class="stat"><b>${s.overall==null?'—':s.overall+'%'}</b><span>Visit score</span></div>${(s.byElement||[]).map(r=>`<div class="stat"><b>${r.pct==null?'—':r.pct+'%'}</b><span>${escA(r.label)}</span></div>`).join('')}</div>`;
+  if(s.storeNumbers){const P=s.storeNumbers;html+=`<div class="dsec"><h3>Store numbers (${escA({d:'Prior Day',w:'WTD',m:'MTD'}[s.period]||'')} as of ${escA(mdate(s.scoreAsOf))})</h3><div class="kgrid">${Object.entries(REPORT_METRICS).map(([k,l])=>P[k]?`<div>${escA(l)}<b>${P[k][0]==null?'—':(+P[k][0]).toLocaleString('en-US',{maximumFractionDigits:1})}</b></div>`:'').join('')}</div>${note(misc.score?.text)}</div>`;}
+  const lv=v.lever||{};html+=`<div class="dsec"><h3>Lever</h3><div><span class="pill">${lv.pick==='close'?'Close Rate':lv.pick==='tkt'?'Avg Ticket':'Not picked'}</span></div>${note(lv.why)}</div>`;
+  const lw=v.lwin||{};html+=`<div class="dsec"><h3>Leader win${lw['lw-name']?': '+escA(lw['lw-name']):''}</h3>${note(lw['lw-win'],'win')||'<div class="muted">None recorded</div>'}</div>`;
+  if(v.followup&&Object.keys(v.followup).length)html+=`<div class="dsec"><h3>Last visit's commitments</h3>${Object.entries(v.followup).map(([i,x])=>`<div class="chk"><b class="${x}">${{yes:'DONE',partial:'PARTIAL',no:'NOT DONE'}[x]}</b><span>Commitment ${+i+1}</span></div>`).join('')}</div>`;
+  html+=`<div class="dsec"><h3>1 · High Performing Sales Culture</h3>${chk(el.e1?.checks,ELEMENTS[0].items)}${note(el.e1?.notes)}
+    ${SEGMENTS.map((g,gi)=>`<div style="margin-top:8px;font-weight:700;font-size:13px">${escA(g.name)}</div>${chk(el['seg'+gi]?.checks,g.items)}${note(el['seg'+gi]?.notes)}`).join('')}</div>`;
+  html+=`<div class="dsec"><h3>Consultants coached</h3>${(v.scorecards||[]).filter(c=>c.name).map(c=>`<div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px">
+     <div style="font-weight:800">${escA(c.name)}</div>${note(c.win,'win')}
+     <div class="kgrid" style="margin-top:6px">${Object.entries(c.kpi||{}).map(([k,x])=>`<div>${escA(k)}<b>${escA(x)}</b></div>`).join('')}</div>
+     <div style="margin-top:6px;font-weight:700;font-size:13px">Stand-Up Practice</div>${chk(c.practice,PRACTICE.items)}
+     ${c.coached?'<div style="margin-top:6px;font-weight:700;font-size:13px">Coached on</div>'+note(c.coached):''}</div>`).join('')||'<div class="muted">None</div>'}${note(misc.sccard?.text)}</div>`;
+  ELEMENTS.slice(1).forEach(E=>{const r=el['e'+E.n]||{};
+    html+=`<div class="dsec"><h3>${E.n} · ${escA(E.t)}</h3>${chk(r.checks,E.items)}`;
+    if(E.aorIntro)html+=AORS.map((a,ai)=>{const x=(v.aor||{})['a'+ai]||{};return `<div class="chk"><b class="${x.status==='pass'?'yes':x.status==='needs'?'no':''}">${x.status?TAG[x.status]:'—'}</b><span>${escA(a)}${x.notes?'<div class="note">'+escA(x.notes)+'</div>':''}<div class="photos" data-ph="aor:a${ai}"></div></span></div>`;}).join('');
+    html+=`${note(r.notes)}<div class="photos" data-ph="el:e${E.n}"></div></div>`;});
+  html+=`<div class="dsec"><h3>Action plan</h3>${(v.action||[]).filter(a=>a&&(a.behavior||a.focus)).map((a,i)=>`<div class="note"><b>${i+1}. ${escA(a.focus||'')}</b><br>${escA(a.behavior||'')}${a.measure?'<br>Measure: '+escA(a.measure):''}${a.by?'<br>By: '+escA(a.by):''}</div>`).join('')}${note(misc.action?.text)}</div>`;
+  html+=`<div class="dsec"><h3>Director reflection</h3>${note(misc.reflect?.text)}${note(v.ref?.coach)}</div>
+    <div class="dsec"><h3>Other photos</h3><div class="photos" data-ph="rest"></div></div>`;
+  d.innerHTML=html;d.style.display='block';$('listview').style.display='none';scrollTo(0,0);
+  $('back').onclick=()=>{d.style.display='none';$('listview').style.display='block';};
+  if(v.photoCount){try{const ph=await API.getPhotos(id);ph.sort((a,b)=>a.id.localeCompare(b.id));
+    ph.forEach(p=>{const box=d.querySelector(`[data-ph="${p.scope}:${p.key}"]`)||d.querySelector('[data-ph="rest"]');
+      const i=document.createElement('img');i.src=p.data;box.appendChild(i);});}catch(e){}}
+  else if(v.photosClearedAt){d.querySelector('[data-ph="rest"]').innerHTML='<div class="muted">Photos from this visit were cleared to save space.</div>';}
+}
+
+/* ── admin: daily numbers ── */
+function readFile(inp){return new Promise((res,rej)=>{const f=inp.files[0];if(!f)return res(null);const r=new FileReader();r.onload=()=>res({text:r.result,name:f.name});r.onerror=()=>rej(r.error);r.readAsText(f);});}
+$('fStore').addEventListener('change',async()=>{try{const f=await readFile($('fStore'));const p=parseDailyReport(f.text);PARSED.store=p;
+  $('rStore').innerHTML=`<span class="ok">✓ ${Object.keys(p.stores).length} of ${STORES.length} stores</span>, report date ${escA(fmtDate(p.asOf))}.`+
+    (p.unmatched.length?`<br><span class="bad">Didn't match a store:</span> ${escA(p.unmatched.join(', '))}. Send these names to Claude to add them.`:'');}
+  catch(e){PARSED.store=null;$('rStore').innerHTML='<span class="bad">'+escA(e.message)+'</span>';}ready();});
+$('fRsa').addEventListener('change',async()=>{try{const f=await readFile($('fRsa'));const p=parseRSA(f.text,f.name);PARSED.rsa=p;
+  $('rRsa').innerHTML=`<span class="ok">✓ ${Object.keys(p.rows).length} consultants</span>${p.from?', '+escA(mdate(p.from))+' to '+escA(mdate(p.to)):''}. Goals: ${escA(p.cols.map((c,i)=>c+' '+p.goal[i]).slice(0,4).join(', '))}…`;}
+  catch(e){PARSED.rsa=null;$('rRsa').innerHTML='<span class="bad">'+escA(e.message)+'</span>';}ready();});
+function ready(){$('saveNums').disabled=!(PARSED.store||PARSED.rsa);}
+$('saveNums').addEventListener('click',async()=>{const b=$('saveNums');b.disabled=true;$('numStatus').textContent='Saving…';
+  try{if(PARSED.store)await API.putMetrics('stores',{asOf:PARSED.store.asOf,stores:PARSED.store.stores});
+    if(PARSED.rsa)await API.putMetrics('rsa',PARSED.rsa);
+    $('numStatus').innerHTML='<span class="ok">✓ Saved.</span> Directors see the new numbers next time they open the app.';}
+  catch(e){$('numStatus').innerHTML='<span class="bad">Could not save: '+escA(e.message)+'</span>';}b.disabled=false;});
+
+/* ── admin: storage meter + clearing old photos ── */
+const LIMIT=1024*1024*1024;
+function meter(){const used=VISITS.reduce((a,v)=>a+(v.photoBytes||0)+JSON.stringify(v).length,0);
+  const pct=Math.min(100,used/LIMIT*100);$('meterBar').style.width=pct.toFixed(1)+'%';
+  $('meterTxt').textContent=`About ${(used/1048576).toFixed(0)} MB of 1,024 MB free space used by visits (${pct.toFixed(1)}%). Shared with the Smart Scheduler, which uses very little.`;}
+let armed=false;
+$('clearOld').addEventListener('click',async()=>{
+  const cutoff=new Date(Date.now()-90*864e5).toISOString().slice(0,10);
+  const old=VISITS.filter(v=>(v.header?.vdate||'9999')<cutoff&&v.photoCount);
+  if(!old.length){$('clearMsg').textContent='No visits older than 90 days have photos.';return;}
+  if(!armed){armed=true;$('clearOld').textContent=`Tap again to clear photos from ${old.length} visits`;$('clearMsg').textContent='Save PDFs of any you want to keep first. The written visits stay.';return;}
+  armed=false;$('clearOld').disabled=true;let n=0;
+  for(const v of old){try{await API.clearPhotos(v.id);n++;}catch(e){}}
+  $('clearMsg').textContent=`Cleared photos from ${n} visits.`;$('clearOld').disabled=false;$('clearOld').textContent='Clear photos from visits older than 90 days';load();});
+</script>
+</body></html>
