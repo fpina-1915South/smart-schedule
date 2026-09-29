@@ -29,16 +29,21 @@
         <button class="btn" type="submit">Sign in</button>
       </form>
       <div class="gmsg ${err ? "err" : ""}" id="siMsg">${esc(msg || "")}</div>
-      <p class="note" style="margin-top:14px">Forgot your password? Ask Frank Pina to reset it. <a href="#" id="siLink">Email me a sign-in link instead</a></p>`);
+      <p class="note" style="margin-top:14px">Forgot your password or it stopped working? <a href="#" id="siReset">Email me a link to reset it</a>. Or <a href="#" id="siLink">email me a sign-in link instead</a>.</p>`);
     $("siForm").addEventListener("submit", async e => {
       e.preventDefault();
       const email = $("siEmail").value.trim().toLowerCase(), pass = $("siPass").value;
       if (DOMAIN && !email.endsWith("@" + DOMAIN)){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Use your @" + DOMAIN + " email."; return; }
       $("siMsg").className = "gmsg"; $("siMsg").textContent = "Signing in...";
       try { await auth.signInWithEmailAndPassword(email, pass); }
-      catch(err2){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = /password|credential|user-not-found|invalid/i.test(err2 && err2.code || "") ? "That email and password don't match. Check with Frank if you need it reset." : "Couldn't sign in: " + (err2 && err2.message || err2); }
+      catch(err2){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = /password|credential|user-not-found|invalid/i.test(err2 && err2.code || "") ? "That email and password don't match. If you've signed in to the Store Visit app with an emailed link, that clears your scheduler password. Click \"Email me a link to reset it\" below to set a new one." : "Couldn't sign in: " + (err2 && err2.message || err2); }
     });
     $("siLink").addEventListener("click", e => { e.preventDefault(); showLinkSignIn(); });
+    $("siReset").addEventListener("click", async e => { e.preventDefault();
+      const em = ($("siEmail").value || "").trim().toLowerCase();
+      if (!em || (DOMAIN && !em.endsWith("@" + DOMAIN))){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Type your @" + DOMAIN + " email above first, then click reset."; return; }
+      try { await auth.sendPasswordResetEmail(em, {url: location.origin + location.pathname}); $("siMsg").className = "gmsg"; $("siMsg").textContent = "Check your email for a link to set a new password (look in junk too). Then come back and sign in."; }
+      catch(err3){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Couldn't send the reset email: " + (err3 && err3.message || err3) + " Ask Frank to reset it."; } });
   }
   function showLinkSignIn(msg, err){
     gate(`<p>We'll email you a one-time sign-in link. Use this only if you don't have a password.</p>
