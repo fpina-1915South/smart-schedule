@@ -20,48 +20,124 @@
   const fs = firebase.firestore();
   try { fs.settings({ignoreUndefinedProperties:true, merge:true}); } catch(e) {}
 
-  /* ---------- sign in with a one-time email link ---------- */
-  function showSignIn(msg, err){
-    gate(`<p>Sign in with your work email and the password Frank gave you.</p>
+  /* ---------- sign in with email + password (same accounts as Order Verification) ----------
+     First time: create an account and confirm the email once. After that: email + password.
+     No emailed sign-in links: the free Firebase plan only allows 5 of those a day. */
+  const APP_URL = () => location.origin + location.pathname;
+  const okDomain = e => !DOMAIN || e.endsWith("@" + DOMAIN);
+  function say(text, err){ const m = $("siMsg"); if (m){ m.className = "gmsg" + (err ? " err" : ""); m.textContent = text || ""; } }
+  function friendly(err){
+    const c = err && err.code || "";
+    if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c)) return "That email and password don't match. Try again, or click Forgot password.";
+    if (/too-many-requests/.test(c)) return "Too many tries. Wait a few minutes, or click Forgot password.";
+    if (/weak-password/.test(c)) return "Pick a longer password (at least 8 characters).";
+    if (/invalid-email/.test(c)) return "That doesn't look like an email address.";
+    if (/network/.test(c)) return "No internet connection. Check Wi-Fi and try again.";
+    return (err && err.message) || String(err);
+  }
+  const lnk = (id, text) => `<a href="#" id="${id}">${text}</a>`;
+  function showSignIn(msg, err, email){
+    gate(`<p>Sign in with your 1915 South email and password. It's the same login as Order Verification.</p>
       <form id="siForm">
         <input type="email" id="siEmail" required autocomplete="username" placeholder="you@${esc(DOMAIN || "company.com")}">
         <input type="password" id="siPass" required autocomplete="current-password" placeholder="Password" style="margin-top:8px">
         <button class="btn" type="submit">Sign in</button>
       </form>
-      <div class="gmsg ${err ? "err" : ""}" id="siMsg">${esc(msg || "")}</div>
-      <p class="note" style="margin-top:14px">Forgot your password or it stopped working? <a href="#" id="siReset">Email me a link to reset it</a>. Or <a href="#" id="siLink">email me a sign-in link instead</a>.</p>`);
+      <div class="gmsg" id="siMsg"></div>
+      <p class="note" style="margin-top:10px;text-align:right">${lnk("goForgot", "Forgot password?")}</p>
+      <p class="note" style="margin-top:14px"><b>First time here?</b> ${lnk("goCreate", "Create your account")}</p>`);
+    if (email) $("siEmail").value = email;
+    say(msg, err);
+    $("goCreate").onclick = e => { e.preventDefault(); showCreate("", false, $("siEmail").value.trim()); };
+    $("goForgot").onclick = e => { e.preventDefault(); showForgot($("siEmail").value.trim()); };
     $("siForm").addEventListener("submit", async e => {
       e.preventDefault();
-      const email = $("siEmail").value.trim().toLowerCase(), pass = $("siPass").value;
-      if (DOMAIN && !email.endsWith("@" + DOMAIN)){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Use your @" + DOMAIN + " email."; return; }
-      $("siMsg").className = "gmsg"; $("siMsg").textContent = "Signing in...";
-      try { await auth.signInWithEmailAndPassword(email, pass); }
-      catch(err2){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = /password|credential|user-not-found|invalid/i.test(err2 && err2.code || "") ? "That email and password don't match. If you've signed in to the Store Visit app with an emailed link, that clears your scheduler password. Click \"Email me a link to reset it\" below to set a new one." : "Couldn't sign in: " + (err2 && err2.message || err2); }
+      const em = $("siEmail").value.trim().toLowerCase(), pass = $("siPass").value;
+      if (!okDomain(em)){ say("Use your @" + DOMAIN + " email.", true); return; }
+      say("Signing in...");
+      try { await auth.signInWithEmailAndPassword(em, pass); } catch(err2){ say(friendly(err2), true); }
     });
-    $("siLink").addEventListener("click", e => { e.preventDefault(); showLinkSignIn(); });
-    $("siReset").addEventListener("click", async e => { e.preventDefault();
-      const em = ($("siEmail").value || "").trim().toLowerCase();
-      if (!em || (DOMAIN && !em.endsWith("@" + DOMAIN))){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Type your @" + DOMAIN + " email above first, then click reset."; return; }
-      try { await auth.sendPasswordResetEmail(em, {url: location.origin + location.pathname}); $("siMsg").className = "gmsg"; $("siMsg").textContent = "Check your email for a link to set a new password (look in junk too). Then come back and sign in."; }
-      catch(err3){ $("siMsg").className = "gmsg err"; $("siMsg").textContent = "Couldn't send the reset email: " + (err3 && err3.message || err3) + " Ask Frank to reset it."; } });
   }
-  function showLinkSignIn(msg, err){
-    gate(`<p>We'll email you a one-time sign-in link. Use this only if you don't have a password.</p>
-      <form id="lnForm"><input type="email" id="lnEmail" required autocomplete="email" placeholder="you@${esc(DOMAIN || "company.com")}">
-      <button class="btn" type="submit">Email me a sign-in link</button></form>
-      <div class="gmsg ${err ? "err" : ""}" id="lnMsg">${esc(msg || "")}</div>
-      <p class="note" style="margin-top:14px"><a href="#" id="lnBack">Back to password sign-in</a></p>`);
-    $("lnBack").addEventListener("click", e => { e.preventDefault(); showSignIn(); });
-    $("lnForm").addEventListener("submit", async e => {
+  function showCreate(msg, err, email){
+    gate(`<p><b>Create your account.</b> Use your 1915 South email and pick a password (at least 8 characters). We'll send one email to confirm it's you. After that, you just sign in.</p>
+      <form id="crForm">
+        <input type="email" id="crEmail" required autocomplete="username" placeholder="you@${esc(DOMAIN || "company.com")}">
+        <input type="password" id="crPass" required autocomplete="new-password" placeholder="Create a password" style="margin-top:8px">
+        <input type="password" id="crPass2" required autocomplete="new-password" placeholder="Type it again" style="margin-top:8px">
+        <button class="btn" type="submit">Create account</button>
+      </form>
+      <div class="gmsg" id="siMsg"></div>
+      <p class="note" style="margin-top:14px">${lnk("goSignIn", "Already have an account? Sign in")}</p>`);
+    if (email) $("crEmail").value = email;
+    say(msg, err);
+    $("goSignIn").onclick = e => { e.preventDefault(); showSignIn("", false, $("crEmail").value.trim()); };
+    $("crForm").addEventListener("submit", async e => {
       e.preventDefault();
-      const email = $("lnEmail").value.trim().toLowerCase();
-      if (DOMAIN && !email.endsWith("@" + DOMAIN)){ $("lnMsg").className = "gmsg err"; $("lnMsg").textContent = "Use your @" + DOMAIN + " email."; return; }
-      $("lnMsg").className = "gmsg"; $("lnMsg").textContent = "Sending...";
+      const em = $("crEmail").value.trim().toLowerCase(), p1 = $("crPass").value, p2 = $("crPass2").value;
+      if (!okDomain(em)){ say("Use your @" + DOMAIN + " email.", true); return; }
+      if (p1.length < 8){ say("Pick a password with at least 8 characters.", true); return; }
+      if (p1 !== p2){ say("The two passwords don't match.", true); return; }
+      say("Creating your account...");
       try {
-        await auth.sendSignInLinkToEmail(email, {url: location.origin + location.pathname, handleCodeInApp: true});
-        try { localStorage.setItem(EMAIL_KEY, email); } catch(e2) {}
-        gate(`<p><b>Check your email.</b> We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device and you're in.</p>`);
-      } catch(err2){ $("lnMsg").className = "gmsg err"; $("lnMsg").textContent = "Couldn't send the link: " + (err2 && err2.message || err2); }
+        const res = await auth.createUserWithEmailAndPassword(em, p1);
+        if (!(await isApproved(res.user))){ try { await sendConfirmOnce(res.user); } catch(e2) {} }
+      } catch(err2){
+        if (err2 && err2.code === "auth/email-already-in-use") showForgot(em, "You already have an account (maybe from Order Verification or an older sign-in). Click the button below and we'll email you a link to set your password.");
+        else say(friendly(err2), true);
+      }
+    });
+  }
+  function showForgot(email, note){
+    gate(`<p>${esc(note || "Enter your 1915 South email and we'll send a link to set a new password.")}</p>
+      <form id="fgForm"><input type="email" id="fgEmail" required autocomplete="username" placeholder="you@${esc(DOMAIN || "company.com")}">
+      <button class="btn" type="submit">Email me a password link</button></form>
+      <div class="gmsg" id="siMsg"></div>
+      <p class="note" style="margin-top:14px">${lnk("goSignIn2", "Back to sign in")}</p>`);
+    if (email) $("fgEmail").value = email;
+    $("goSignIn2").onclick = e => { e.preventDefault(); showSignIn("", false, $("fgEmail").value.trim()); };
+    $("fgForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const em = $("fgEmail").value.trim().toLowerCase();
+      if (!okDomain(em)){ say("Use your @" + DOMAIN + " email.", true); return; }
+      say("Sending...");
+      try { await auth.sendPasswordResetEmail(em, {url: APP_URL()}); } catch(err2){ if (!/user-not-found/.test(err2 && err2.code || "")){ say(friendly(err2), true); return; } }
+      showSignIn("If that email has an account, a password link is on its way. Set your password, then sign in here. Check junk mail if you don't see it.", false, em);
+    });
+  }
+  /* Approved without the confirmation email: on Frank's approved list (shared with Order Verification) or on the scheduler's Access list. */
+  async function isApproved(u){
+    const em = String(u.email || "").toLowerCase();
+    try { const d = await fs.doc("ovApproved/" + em).get(); if (d.exists) return true; } catch(e) {}
+    try { const a = await fs.doc("config/access").get(); const x = a.exists ? a.data() : {};
+      if ([].concat(x.leaders || [], x.admins || []).map(v => String(v).toLowerCase()).includes(em)) return true; } catch(e) {}
+    return !!OWNER && em === OWNER;
+  }
+  const SENT_KEY = "ss-confirm-sent";
+  async function sendConfirmOnce(u, force){
+    let last = 0; try { last = +localStorage.getItem(SENT_KEY + ":" + u.email) || 0; } catch(e) {}
+    if (Date.now() - last < 864e5) return force ? "wait" : "skipped";
+    await u.sendEmailVerification({url: APP_URL()});
+    try { localStorage.setItem(SENT_KEY + ":" + u.email, String(Date.now())); } catch(e) {}
+    return "sent";
+  }
+  function showVerify(u){
+    return new Promise(done => {
+      gate(`<p><b>One last step.</b> We sent an email to <b>${esc(u.email)}</b>. Open it and click the link to confirm it's you, then come back and click the button below.</p>
+        <button class="btn" type="button" id="vfDone">I've confirmed my email</button>
+        <div class="gmsg" id="siMsg"></div>
+        <p class="note" style="margin-top:14px">${lnk("vfResend", "Send it again")} · ${lnk("vfOut", "Use a different email")}</p>
+        <p class="note">Check junk mail if you don't see it. No email? Ask Frank to add you to the approved list, then click the button above.</p>`);
+      $("vfDone").onclick = async () => {
+        say("Checking...");
+        try { await u.reload(); const cur = auth.currentUser || u;
+          if (cur.emailVerified || await isApproved(cur)){ await cur.getIdToken(true); done(); }
+          else say("Not confirmed yet. Click the link in the email first (it can take a minute to arrive).", true);
+        } catch(e){ say(friendly(e), true); }
+      };
+      $("vfResend").onclick = async e => { e.preventDefault();
+        try { const r = await sendConfirmOnce(u, true); say(r === "wait" ? "We already sent one in the last 24 hours. Check junk mail, or ask Frank to add you to the approved list." : "Sent. Check your email (and junk mail).", r === "wait"); }
+        catch(err2){ say(/too-many|quota|exceeded/i.test((err2 && err2.code || "") + (err2 && err2.message || "")) ? "Today's email limit is used up. Try tomorrow, or ask Frank to add you to the approved list." : friendly(err2), true); } };
+      $("vfOut").onclick = e => { e.preventDefault(); auth.signOut().then(() => location.reload()); };
     });
   }
 
@@ -73,7 +149,7 @@
       email = await new Promise(res => $("cfForm").addEventListener("submit", e => { e.preventDefault(); res($("cfEmail").value.trim().toLowerCase()); }));
     }
     try { await auth.signInWithEmailLink(email, location.href); try { localStorage.removeItem(EMAIL_KEY); } catch(e) {} }
-    catch(err){ showSignIn("That sign-in link didn't work. It may have expired or already been used. Send a new one.", true); }
+    catch(err){ showSignIn("That old sign-in link didn't work. Sign in with your email and password instead (first time? click Create your account).", true, email); }
     history.replaceState(null, "", location.origin + location.pathname);
     return true;
   }
@@ -227,6 +303,7 @@
   async function start(u){
     if (started) return; started = true;
     $("acctWho").textContent = "Signed in as " + u.email;
+    if (!u.emailVerified && !(await isApproved(u))){ try { await sendConfirmOnce(u); } catch(e) {} await showVerify(u); u = auth.currentUser || u; }
     try { const us = await fs.doc("users/" + u.uid).get(); if (us.exists && us.data().mustChange) await forcePassword(u); } catch(e) {}
     try { await fs.doc("users/" + u.uid).set({email:u.email, name:(u.email || "").split("@")[0], lastSeen:new Date().toISOString()}, {merge:true}); } catch(e) {}
     try { const s = await fs.doc("config/access").get(); ACCESS = s.exists ? s.data() : null; } catch(e){ ACCESS = null; }
