@@ -9,8 +9,8 @@ const SHAPES = {
   evening:{t:"Heavier evenings", d:"Run leaner on Openers and load up your Mid and Closer shifts so you stay heavy to close.", pill:"Heavier evenings"}
 };
 const KEY = "smart-scheduler-v3";
-const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"Guest Solutions / CSR", CSRK:"Guest Solutions key holder"};
-const LEAD_ORDER = ["GM","L","LSL","ASL","KH","CSRK"];
+const ROLES = {C:"Consultant", PT:"Part-time Consultant", GM:"General Manager", L:"Assistant General Manager", LSL:"Lead Selling Leader", ASL:"Assistant Selling Leader", KH:"Key Holder", CSR:"Guest Solutions / CSR", CSRK:"Guest Solutions key holder", MM:"Market Manager"};
+const LEAD_ORDER = ["MM","GM","L","LSL","ASL","KH","CSRK"];
 const isLead = r => r !== "C" && r !== "PT" && r !== "CSR";   // counts toward leader on the floor
 const fte = r => r === "PT" ? 0.5 : 1;          // two part-timers equal one full-time consultant
 /* New hires in training show on the schedule but never count toward coverage or staffing. */
@@ -26,9 +26,9 @@ const TIERS = {H:"High", M:"Middle", L:"Low"};
 const tierOf = (store, p) => (PERF[store] && PERF[store][p.name]) || "";
 const isCounted = p => sells(p.role) && !nhActive(p);
 const leadCounted = p => isLead(p.role) && !nhActive(p);
-const sells = r => r !== "L" && r !== "GM" && r !== "CSR" && r !== "CSRK";            // counts toward consultants on the floor
-const hourly = r => r !== "L" && r !== "GM";
-const wkndReq = r => r !== "CSR" && r !== "CSRK";   // weekends are mandatory workdays for sales and leadership, unless on PTO           // held to the weekly hours target
+const sells = r => r !== "L" && r !== "GM" && r !== "CSR" && r !== "CSRK" && r !== "MM";            // counts toward consultants on the floor
+const hourly = r => r !== "L" && r !== "GM" && r !== "MM";   // Market Managers cover several stores, so no weekly hours target here
+const wkndReq = r => r !== "CSR" && r !== "CSRK" && r !== "MM";   // weekends are mandatory workdays for sales and leadership, unless on PTO           // held to the weekly hours target
 let S = {store:"Baton Rouge", view:"guests", gpc:1, gpcLight:1, minc:2, target:40, lunch:0.5, pto:8, ptTarget:20, nhWeeks:4, nhTagWeeks:4};
 /* The staffing standard is one company-wide setting (db doc settings/standard). Only the artifact owner can change it. */
 const STD_KEYS = ["gpc","minc","target","lunch","pto","ptTarget","nhWeeks","nhTagWeeks"];
@@ -582,7 +582,9 @@ function suggest(store, week, raw){
   /* CSRs: scheduled 5 days on the busiest days, never counted toward sales coverage, no weekend requirement. */
   const csrN = blank(team.CSR) ? 0 : Math.max(0, +team.CSR);
   const csrs = csrN ? assignSlots(store, fixedSlots(store, csrN, di => h => 0, w, true), Array(csrN).fill("CSR"), Array.from({length:csrN}, (_,x) => nameFor("CSR", x, "CSR " + (x+1))), Array.from({length:csrN}, (_,x) => ptoFor("CSR", x))) : [];
-  const all = cons.concat(pts, nhs, leads, csrs);
+  /* Market Managers are added by hand to cover a shift. Keep them and their shifts when the roster is rebuilt. */
+  const mms = cur.filter(p => p.role === "MM").map(p => ({name:p.name, role:"MM", days:p.days.slice(), lunch:Array(7).fill(null)}));
+  const all = cons.concat(pts, nhs, leads, csrs, mms);
   if (raw) return all;
   return fillLunches(store, optimizeWeek(store, all).people);
 }
@@ -643,7 +645,7 @@ function wlbSummary(store, r){
    Goals: talent mix (High in hot zones, new hires paired) and work-life balance (days off together, no close-then-open). */
 function optimizeWeek(store, people){
   const r = {people};
-  const grp = p => p.role === "C" ? "C" + (nhActive(p) ? "t" : "") : p.role === "PT" ? "PT" : p.role === "CSR" ? "CSR" : ["LSL","ASL","KH"].includes(p.role) ? "SL" : "NL";
+  const grp = p => p.role === "C" ? "C" + (nhActive(p) ? "t" : "") : p.role === "PT" ? "PT" : p.role === "CSR" ? "CSR" : p.role === "MM" ? "MM" : ["LSL","ASL","KH"].includes(p.role) ? "SL" : "NL";
   const pay = (di, k) => { const t = k && k !== "PTO" && tplOf(store, di, k); return t ? paid(t) : null; };
   const groups = {}; people.forEach(p => (groups[grp(p)] = groups[grp(p)] || []).push(p));
   const clearL = (p, ...ds) => { if (p.lunch) ds.forEach(d => p.lunch[d] = null); };
@@ -1011,7 +1013,7 @@ function renderStatus(){
   $("weekHint").textContent = S.week === thisW ? "" : (S.week < thisW ? "Past week" : "Future week");
   $("copyLast").title = lastWeekOf(st, S.week) ? "Copy names, shifts and lunches from the week of " + weekLabel(lastWeekOf(st, S.week)) : "No earlier week saved yet";
   $("viewOnly").hidden = canWrite;
-  ["suggest","balance","clear","addC","addPT","addNH","addL","addCSR","copyLast"].forEach(id => { if ($(id)) $(id).disabled = !canWrite; });
+  ["suggest","balance","clear","addC","addPT","addNH","addL","addCSR","addMM","copyLast"].forEach(id => { if ($(id)) $(id).disabled = !canWrite; });
 }
 function renderNow(){ const n = storeNow(S.store); withWeek(n.week, () => renderNow0(n)); }
 function renderNow0(n){
@@ -1302,7 +1304,7 @@ $("suggest").addEventListener("click", () => { const k = rk(S.store, S.week), fr
   renderAll(); });
 $("clear").addEventListener("click", () => { const r = roster(S.store); r.people.forEach(p => p.days = Array(7).fill("")); commit(S.store, S.week, r); renderAll(); toast("Week cleared"); });
 function add(role, nh){ const r = roster(S.store); const n = (nh ? r.people.filter(p => p.nh).length : r.people.filter(p => p.role===role).length) + 1;
-  const np = {name:nh ? "New hire " + n : ({L:"Leader ", PT:"Part-timer ", CSR:"Guest Solutions ", CSRK:"GS key holder "}[role] || "Consultant ") + n, role, days:Array(7).fill(""), lunch:Array(7).fill(null)};
+  const np = {name:nh ? "New hire " + n : ({L:"Leader ", PT:"Part-timer ", CSR:"Guest Solutions ", CSRK:"GS key holder ", MM:"Market Manager "}[role] || "Consultant ") + n, role, days:Array(7).fill(""), lunch:Array(7).fill(null)};
   if (nh){ np.nh = true; np.nhStart = S.week; }
   r.people.push(np); commit(S.store, S.week, r); renderAll();
   const el = $("nm" + (r.people.length-1)); if (el){ el.focus(); el.select(); } }
@@ -1310,6 +1312,7 @@ $("addC").addEventListener("click", () => add("C"));
 $("addL").addEventListener("click", () => add("L"));
 $("addPT").addEventListener("click", () => add("PT"));
 (() => { if ($("addCSR")) return; const b = document.createElement("button"); b.className = "btn ghost"; b.id = "addCSR"; b.textContent = "+ Add Guest Solutions"; $("addL").after(b); b.addEventListener("click", () => add("CSR"));
+  const bm = document.createElement("button"); bm.className = "btn ghost"; bm.id = "addMM"; bm.textContent = "+ Add market manager"; bm.title = "Market Manager covering a shift: holds a key, so they count as a leader in the store to open or close"; b.after(bm); bm.addEventListener("click", () => add("MM"));
   const st = document.createElement("style"); st.textContent = `.roster td.dy select.k-X,.mshift.k-X{background:#FFF4E6;color:#8A4B0F;border-color:#F68C2C}
   .roster td.dy select.k-F,.mshift.k-F{background:#DBECF1;color:#003B4A;border-color:#3F738D} .tag.F{background:#DBECF1;color:#003B4A} .tag.X{background:#FFF4E6;color:#8A4B0F}
   .roster td.dy .adj{display:flex;flex-direction:column;gap:2px;margin-top:3px} .roster td.dy .adj select{min-width:0;width:100%;font-size:11px;padding:3px 1px;border:1px solid #F68C2C;border-radius:5px;background:var(--surface);color:var(--ink);font-weight:600}
