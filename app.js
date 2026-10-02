@@ -501,7 +501,7 @@ function leaderPlan(store, roles, names, presets, w){
   }
   return people;
 }
-const TEAM_FIELDS = [["C","Full-time consultants"],["pt","Part-time (each counts ½)"],["GM","General Managers"],["L","Asst General Managers"],["LSL","Lead Selling Leaders"],["ASL","Asst Selling Leaders"],["KH","Key Holders"],["CSR","Guest Solutions / CSRs (not counted)"],["CSRK","Guest Solutions key holders (hold a key, don't sell)"]];
+const TEAM_FIELDS = [["C","Full-time consultants"],["pt","Part-time (each counts ½)"],["GM","General Managers"],["L","Asst General Managers"],["LSL","Lead Selling Leaders"],["ASL","Asst Selling Leaders"],["KH","Key Holders"],["CSR","Guest Solutions / CSRs (not counted)"],["CSRK","Guest Solutions key holders (hold a key, don't sell)"],["MM","Market Managers (hold a key, don't sell)"]];
 function teamOf(store){ return TEAMS[store] || (TEAMS[store] = {}); }
 const blank = v => v === "" || v == null || isNaN(v);
 function recommended(store){ return withWeek(FUTURE, () => recommended0(store)); }
@@ -524,7 +524,7 @@ function recommended0(store){
   }
   const sellCov = (di,h) => leads.filter(p => isCounted(p) && p.days[di] && onFloor(tplOf(store,di,p.days[di]), h)).length;
   const cp = autoSlots(store, di => h => Math.max(0, need(guests(store,di,h), store, di, h) - sellCov(di,h)), w);
-  const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0, CSR:0, CSRK:0}; lroles.forEach(r => counts[r]++);
+  const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0, CSR:0, CSRK:0, MM:0}; lroles.forEach(r => counts[r]++);
   return {counts, leads, cp, slotted};
 }
 function suggest(store, week, raw){
@@ -542,6 +542,9 @@ function suggest(store, week, raw){
   const roles = []; ["GM","L","LSL","ASL","KH"].forEach(k => { let n = leadGiven ? (blank(team[k]) ? rec.counts[k] : (+team[k]||0)) : rec.counts[k];
     if (k === "KH" && blank(team.KH)) n = Math.max(0, n - gsk); for (let x=0; x<n; x++) roles.push(k); });
   for (let x=0; x<gsk; x++) roles.push("CSRK");
+  /* Market Managers entered in Your Team are scheduled as keys (they open or close), never as sellers. */
+  const mmN = blank(team.MM) ? 0 : Math.max(0, +team.MM);
+  for (let x=0; x<mmN; x++) roles.push("MM");
   const rc = {}; const lidx = roles.map(r => (rc[r] = (rc[r]||0) + 1) - 1);
   const leads = roles.length ? leaderPlan(store, roles,
     roles.map((r,x) => nameFor(r, lidx[x], ROLES[r] + (lidx[x] > 0 ? " " + (lidx[x]+1) : ""))), roles.map((r,x) => ptoFor(r, lidx[x])), w) : [];
@@ -583,7 +586,7 @@ function suggest(store, week, raw){
   const csrN = blank(team.CSR) ? 0 : Math.max(0, +team.CSR);
   const csrs = csrN ? assignSlots(store, fixedSlots(store, csrN, di => h => 0, w, true), Array(csrN).fill("CSR"), Array.from({length:csrN}, (_,x) => nameFor("CSR", x, "CSR " + (x+1))), Array.from({length:csrN}, (_,x) => ptoFor("CSR", x))) : [];
   /* Market Managers are added by hand to cover a shift. Keep them and their shifts when the roster is rebuilt. */
-  const mms = cur.filter(p => p.role === "MM").map(p => ({name:p.name, role:"MM", days:p.days.slice(), lunch:Array(7).fill(null)}));
+  const mms = mmN ? [] : cur.filter(p => p.role === "MM").map(p => ({name:p.name, role:"MM", days:p.days.slice(), lunch:Array(7).fill(null)}));
   const all = cons.concat(pts, nhs, leads, csrs, mms);
   if (raw) return all;
   return fillLunches(store, optimizeWeek(store, all).people);
@@ -799,7 +802,7 @@ function renderRoster(){
       <td><button class="icon-btn" data-del="${i}" aria-label="Remove ${esc(p.name)}" style="width:32px">✕</button></td></tr>`; };
   const idx = r.people.map((p,i) => ({p,i}));
   let html = `<thead><tr><th style="text-align:left">Name</th><th>Role</th>${DAYS.map((d,di) => `<th>${d}<small class="dt">${shortDate(addDays(S.week, di))}</small></th>`).join("")}<th>Hours</th><th></th></tr></thead><tbody>`;
-  const ld = idx.filter(x => isLead(x.p.role)).sort((a,b) => LEAD_ORDER.indexOf(a.p.role) - LEAD_ORDER.indexOf(b.p.role));
+  const ld = idx.filter(x => isLead(x.p.role) && x.p.role !== "MM").sort((a,b) => LEAD_ORDER.indexOf(a.p.role) - LEAD_ORDER.indexOf(b.p.role));
   const mirror = p => { const hrs = hoursOf(st, p), hs = statusOf(st, p);
     return `<tr class="mirror"><td class="nm"><div class="mname">${esc(p.name)}</div></td><td class="rl"><span class="mrole">${ROLES[p.role]}<small>selling + leading${tierOf(st,p) ? ` · <b class="tchip t-${tierOf(st,p)}">${TIERS[tierOf(st,p)]}</b>` : " · not rated"}</small></span></td>
       ${p.days.map((k,di) => { const t = k && k !== "PTO" && tplOf(st,di,k); return `<td class="dy"><div class="mshift k-${dayInfo(st,di).closed ? "closed" : kc(k)}">${dayInfo(st,di).closed ? "Closed" : t ? clock(t.in)+"-"+clock(t.out) : (k==="PTO" ? "PTO" : k ? "Pick a shift" : "Off")}${t && hasLunch(t) && p.lunch && p.lunch[di] != null ? `<small>lunch ${clock(p.lunch[di])}</small>` : ""}</div></td>`; }).join("")}
@@ -807,6 +810,8 @@ function renderRoster(){
   html += `<tr class="grp"><td colspan="11">Selling team · full-time target ${S.target} hrs · part-time about ${S.ptTarget} hrs · everyone who sells on the floor</td></tr>`
     + idx.filter(x => x.p.role==="C").map(x => row(x.p, x.i)).join("") + idx.filter(x => x.p.role==="PT").map(x => row(x.p, x.i)).join("") + ld.filter(x => sells(x.p.role)).map(x => mirror(x.p)).join("");
   html += `<tr class="grp"><td colspan="11">Leadership · leaders on the floor · edit selling leaders and key holders here</td></tr>` + ld.map(x => row(x.p, x.i)).join("");
+  const mmRows = idx.filter(x => x.p.role === "MM");
+  if (mmRows.length) html += `<tr class="grp"><td colspan="11">Market Manager · covering a shift to open or close · counts as a leader in the store, not as a seller</td></tr>` + mmRows.map(x => row(x.p, x.i)).join("");
   const csr = idx.filter(x => x.p.role === "CSR");
   if (csr.length) html += `<tr class="grp"><td colspan="11">Guest Solutions · scheduled but not counted toward sales coverage or leader in store</td></tr>` + csr.map(x => row(x.p, x.i)).join("");
   html += `</tbody><tfoot><tr><td style="text-align:left;background:transparent">Selling on the floor</td><td style="background:transparent"></td>${DAYS.map((_,di) => `<td>${r.people.filter(p => isCounted(p) && p.days[di] && p.days[di] !== "PTO").length}</td>`).join("")}<td></td><td style="background:transparent"></td></tr></tfoot>`;
@@ -919,7 +924,8 @@ function renderText(cov){
   if (spc.length) lines.splice(1, 0, "Special hours: " + spc.join(", "));
   r.people.filter(p => p.role==="C").forEach(p => lines.push(line(p)));
   r.people.filter(p => p.role==="PT").forEach(p => lines.push(line(p)));
-  r.people.filter(p => isLead(p.role)).sort((a,b) => LEAD_ORDER.indexOf(a.role) - LEAD_ORDER.indexOf(b.role)).forEach(p => lines.push(line(p)));
+  r.people.filter(p => isLead(p.role) && p.role !== "MM").sort((a,b) => LEAD_ORDER.indexOf(a.role) - LEAD_ORDER.indexOf(b.role)).forEach(p => lines.push(line(p)));
+  r.people.filter(p => p.role === "MM").forEach(p => lines.push(line(p)));
   r.people.filter(p => p.role === "CSR").forEach(p => lines.push(line(p)));
   const shorts = cov.flatMap((rows,di) => rows.filter(x => x.st==="short").map(x => `${DAYS[di]} ${fmt(x.h)}`));
   lines.push("", shorts.length ? "Short hours: " + shorts.join(", ") : "No short hours.");
