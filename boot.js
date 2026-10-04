@@ -335,7 +335,10 @@
       try { await auth.currentUser.updatePassword(p1); alert("Password changed."); }
       catch(e){ alert(/recent/i.test(e.code || "") ? "For security, sign out and sign back in, then change your password right away." : "Couldn't change it: " + e.message); }
     };
-    const sc = document.createElement("script"); sc.src = "app.js?v=" + (C.version || "1"); document.body.appendChild(sc);
+    /* Always load the newest app: read the version fresh from config.js so a cached copy never holds back an update. */
+    let ver = C.version || "1";
+    try { const t = await (await fetch("config.js?nc=" + Date.now(), {cache:"no-store"})).text(); const m = t.match(/version:\s*"([^"]+)"/); if (m) ver = m[1]; } catch(e) {}
+    const sc = document.createElement("script"); sc.src = "app.js?v=" + ver; document.body.appendChild(sc);
   }
 
   (async () => {
