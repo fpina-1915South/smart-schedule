@@ -527,6 +527,17 @@ function recommended0(store){
   const counts = {C:cp.N, pt:0, nh:0, GM:0, L:0, LSL:0, ASL:0, KH:0, CSR:0, CSRK:0, MM:0}; lroles.forEach(r => counts[r]++);
   return {counts, leads, cp, slotted};
 }
+/* Match a name a leader typed ("Kevin", "KEVIN COLLINS ") to the one person on the store roster it clearly means.
+   Returns the roster name, or the typed name if it doesn't clearly match one person. */
+function rosterName(store, name){
+  const staff = ((TEAMS[store] || {}).staff || []).map(p => p.name); if (!staff.length || !name) return name;
+  const tk = n => String(n).toLowerCase().replace(/[()]/g, " ").replace(/[^a-z \-]/g, "").replace(/-/g, " ").split(/\s+/).filter(x => x && !["jr","sr","ii","iii"].includes(x));
+  const t = tk(name); if (!t.length) return name;
+  const one = arr => arr.length === 1 ? arr[0] : null;
+  return one(staff.filter(n => tk(n).join(" ") === t.join(" ")))
+    || (t.length === 1 ? one(staff.filter(n => tk(n)[0] === t[0])) : one(staff.filter(n => { const u = tk(n); return u[u.length-1] === t[t.length-1] && u[0][0] === t[0][0]; })))
+    || name;
+}
 function suggest(store, week, raw){
   const team = teamOf(store), rec = recFor(store), w = (di,h) => (guests(store,di,h) || 0);
   const k0 = rk(store, week || S.week);
@@ -537,8 +548,10 @@ function suggest(store, week, raw){
   /* Names: this week's first, then the last saved week, then the store's staff list (loaded from Paylocity). */
   const staffOf = role => (team.staff || []).filter(p => p.role === role).map(p => p.name);
   const nameFor = (role, i, fallback, nh) => { const a = sameRole(cur, role, nh), b = sameRole(last, role, nh);
-    const base = a.map(p => p.name); b.forEach(p => { if (!base.includes(p.name)) base.push(p.name); });
-    const names = nh ? base : base.concat(staffOf(role).filter(n => !base.includes(n)));
+    const base = a.map(p => p.name);
+    if (!nh) staffOf(role).forEach(n => { if (!base.includes(n)) base.push(n); });
+    b.forEach(p => { const n = rosterName(store, p.name); if (!base.includes(n)) base.push(n); });
+    const names = base;
     return names[i] || fallback; };
   const ptoFor = (role, i, nh) => { const same = sameRole(cur, role, nh); return same[i] ? same[i].days.map(k => k === "PTO" ? "PTO" : "") : null; };
   const leadGiven = ["GM","L","LSL","ASL","KH"].some(k => !blank(team[k]));
@@ -1302,7 +1315,9 @@ $("copyLast").addEventListener("click", () => {
   const r = {posted: SAVED[k] ? SAVED[k].posted : false, people: src.people.map(p => {
     const days = p.days.map((x, di) => { if (x === "PTO") return ""; const m = remapShift(S.store, lw, S.week, di, x); if (m.note) notes.push(p.name + " " + m.note); return m.k; });
     const lunch = (p.lunch || Array(7).fill(null)).map((l, di) => days[di] === p.days[di] ? l : null);
-    const o = {name:p.name, role:p.role, days, lunch}; if (p.nh){ o.nh = true; if (p.nhStart) o.nhStart = p.nhStart; } return o; })};
+    const o = {name:rosterName(S.store, p.name), role:p.role, days, lunch}; if (p.nh){ o.nh = true; if (p.nhStart) o.nhStart = p.nhStart; } return o; })};
+  /* Never let the roster match create two people with the same name: keep the typed name in that case. */
+  r.people.forEach((p, i) => { if (p.name !== src.people[i].name && r.people.filter(q => q.name === p.name).length > 1) p.name = src.people[i].name; });
   fillLunches(S.store, r.people); COPY_NOTES[k] = notes; commit(S.store, S.week, r); renderAll();
   toast("Copied the week of " + weekLabel(lw) + ". PTO was left off." + (notes.length ? " " + notes.length + " shifts moved to fit this week's hours. See Coach's corner." : ""));
 });
