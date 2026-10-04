@@ -534,7 +534,12 @@ function suggest(store, week, raw){
   /* Names carry forward: this week's names first, then the last saved week's team. */
   const lw = lastWeekOf(store, week || S.week), last = lw ? SAVED[rk(store, lw)].people : [];
   const sameRole = (list, role, nh) => list.filter(p => p.role === role && nhActive(p, week || S.week) === !!nh);
-  const nameFor = (role, i, fallback, nh) => { const a = sameRole(cur, role, nh), b = sameRole(last, role, nh); return a[i] ? a[i].name : b[i] ? b[i].name : fallback; };
+  /* Names: this week's first, then the last saved week, then the store's staff list (loaded from Paylocity). */
+  const staffOf = role => (team.staff || []).filter(p => p.role === role).map(p => p.name);
+  const nameFor = (role, i, fallback, nh) => { const a = sameRole(cur, role, nh), b = sameRole(last, role, nh);
+    const base = a.map(p => p.name); b.forEach(p => { if (!base.includes(p.name)) base.push(p.name); });
+    const names = nh ? base : base.concat(staffOf(role).filter(n => !base.includes(n)));
+    return names[i] || fallback; };
   const ptoFor = (role, i, nh) => { const same = sameRole(cur, role, nh); return same[i] ? same[i].days.map(k => k === "PTO" ? "PTO" : "") : null; };
   const leadGiven = ["GM","L","LSL","ASL","KH"].some(k => !blank(team[k]));
   /* A Guest Solutions key holder takes one of the key holder spots the tool would otherwise recommend. */
