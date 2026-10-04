@@ -250,11 +250,22 @@ function fillLunches(store, people){
   return people;
 }
 
+/* Placeholder names the tool made up ("Consultant 3", "Lead Selling Leader", "Key Holder 2"), not real people. */
+const PH_RE = new RegExp("^(" + ["Consultant","Part-timer","Leader","New hire","CSR","GS key holder","Guest Solutions"].concat(Object.values(ROLES)).map(x => x.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join("|") + ")( \\d+)?$", "i");
+const isPlaceholder = n => !n || PH_RE.test(String(n).trim());
+/* Swap placeholder names for real people from the store roster (same role), so every week shows names and ratings. */
+function fillNames(store, r){
+  const staff = (TEAMS[store] || {}).staff || []; if (!staff.length || !r || !r.people) return r;
+  const used = new Set(r.people.map(p => p.name));
+  r.people.forEach(p => { if (p.nh || !isPlaceholder(p.name)) return;
+    const m = staff.find(s => s.role === p.role && !used.has(s.name)); if (m){ p.name = m.name; used.add(m.name); } });
+  return r;
+}
 function roster(store, week){
   week = week || S.week; const k = rk(store, week);
-  if (SAVED[k]) return SAVED[k];
+  if (SAVED[k]) return fillNames(store, SAVED[k]);
   if (!DRAFTS[k]) DRAFTS[k] = {example:true, posted:false, saved:false, people:withWeek(week, () => suggest(store, week))};
-  return DRAFTS[k];
+  return fillNames(store, DRAFTS[k]);
 }
 /* Every edit saves. A week stays a draft until a leader posts it; a posted week stays posted. */
 function commit(store, week, r, post){
@@ -548,9 +559,9 @@ function suggest(store, week, raw){
   /* Names: this week's first, then the last saved week, then the store's staff list (loaded from Paylocity). */
   const staffOf = role => (team.staff || []).filter(p => p.role === role).map(p => p.name);
   const nameFor = (role, i, fallback, nh) => { const a = sameRole(cur, role, nh), b = sameRole(last, role, nh);
-    const base = a.map(p => p.name);
+    const base = a.map(p => p.name).filter(n => !isPlaceholder(n));
     if (!nh) staffOf(role).forEach(n => { if (!base.includes(n)) base.push(n); });
-    b.forEach(p => { const n = rosterName(store, p.name); if (!base.includes(n)) base.push(n); });
+    b.forEach(p => { const n = rosterName(store, p.name); if (!isPlaceholder(n) && !base.includes(n)) base.push(n); });
     const names = base;
     return names[i] || fallback; };
   const ptoFor = (role, i, nh) => { const same = sameRole(cur, role, nh); return same[i] ? same[i].days.map(k => k === "PTO" ? "PTO" : "") : null; };
