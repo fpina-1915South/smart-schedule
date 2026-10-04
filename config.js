@@ -12,5 +12,5 @@ window.SS_CONFIG = {
   },
   ownerEmail: "fpina@1915south.com",   // must match OWNER in firestore.rules
   allowedDomain: "1915south.com",      // only emails at this domain can sign in
-  version: "10"                          // bump this after changing app.js so browsers load the new copy
+  version: "11"                          // bump this after changing app.js so browsers load the new copy
 };

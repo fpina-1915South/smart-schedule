@@ -1027,6 +1027,11 @@ function renderStatus(){
   $("weekSel").innerHTML = [...ws].sort().map(w => { const stt = weekState(st, w); const tag = w === thisW ? " (this week)" : ""; const sw = (DATA[st].cur && addDays(w,6) === DATA[st].switchOn ? " · new hours start Sun" : "") + [0,1,2,3,4,5,6].map(di => { const iso = addDays(w, di), c = closedOn(iso), t = tentpoleNamed(iso); return c ? " · closed " + c : t ? " · " + t.name : ""; }).join("");
     return `<option value="${w}" ${w===S.week?"selected":""}>${weekLabel(w)}${tag} · ${mark[stt]}${sw}</option>`; }).join("");
   $("weekSel").className = "weeksel ws-" + weekState(st, S.week);
+  /* Same week list in the header, under Your store. */
+  if (!$("weekTop")){ const pk = $("store").parentNode; const lb = document.createElement("label"); lb.htmlFor = "weekTop"; lb.textContent = "Week"; lb.style.marginTop = "8px";
+    const sel = document.createElement("select"); sel.id = "weekTop"; pk.appendChild(lb); pk.appendChild(sel); sel.addEventListener("change", e => { S.week = e.target.value; save(); renderAll(); }); }
+  const shortMark = {posted:"Posted", draft:"Draft", none:"Not started"};
+  $("weekTop").innerHTML = [...ws].sort().map(w => `<option value="${w}" ${w===S.week?"selected":""}>${weekLabel(w)}${w === thisW ? " (this week)" : ""} · ${shortMark[weekState(st, w)]}</option>`).join("");
   const bar = $("draftBar"), el = $("postStatus");
   let when = "";
   if (m && m.updatedAt){ const d = new Date(m.updatedAt); when = "Last change " + d.toLocaleString("en-US", {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}); }
