@@ -737,8 +737,11 @@ function hrsStatus(h, role){
   if (role === "PT"){ const t = S.ptTarget; return h > t + 4 ? "over" : h < t - 4 ? "under" : "ok"; }
   if (h > S.target) return "over"; if (h === S.target) return "ok"; if (h >= S.target - 2) return "near"; return "under"; }
 
+const FULLDAY = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const swLabel = st => { const D = DATA[st], iso = D.switchOn; if (!iso) return ""; const [y,m,d] = iso.split("-").map(Number); const wd = (new Date(Date.UTC(y,m-1,d)).getUTCDay() + 6) % 7; return FULLDAY[wd] + ", " + shortDate(iso); };
 function hoursText(store){
-  const ds = daysOf(store).map(d => d.base || d); const t = d => fmt(d.open) + " to " + fmt(d.close);
+  const all = daysOf(store), mixed = all.some(d => (d.base||d).cur) && all.some(d => !(d.base||d).cur);
+  const ds = all.map((d,di) => { const x = d.base || d; return mixed && x.cur ? DATA[store].days[di] : x; }); const t = d => fmt(d.open) + " to " + fmt(d.close);
   const mt = t(ds[0]), f = t(ds[4]), sa = t(ds[5]), su = t(ds[6]); const parts = [];
   if (mt===f && f===sa) parts.push(["Mon to Sat", mt]); else if (f===sa){ parts.push(["Mon to Thu", mt]); parts.push(["Fri and Sat", f]); }
   else { parts.push(["Mon to Thu", mt]); parts.push(["Friday", f]); parts.push(["Saturday", sa]); }
@@ -764,7 +767,7 @@ function renderOverview(){
   const ds = daysOf(st), nCur = ds.filter(d => d.cur && !d.closed).length;
   const spec = ds.map((d,di) => d.closed ? `<span class="hnote closed">${DAYS[di]} ${shortDate(d.iso)}: Closed for ${esc(d.name)}</span>` : d.special ? `<span class="hnote tp">${DAYS[di]} ${shortDate(d.iso)}: ${esc(d.name)} ${fmt(d.open)} to ${fmt(d.close)}</span>` : "").join("");
   $("hoursLine").innerHTML = hoursText(st).map(([a,b]) => `<span><b>${a}</b>${b}</span>`).join("")
-    + spec + (nCur && ds.every(d => d.cur || d.closed) ? `<span class="hnote">Current hours this week. New hours start Sunday, Oct 4.</span>` : nCur ? `<span class="hnote">Mon to Sat on current hours. Sunday, Oct 4 is the first day of the new hours.</span>` : DATA[st].cur ? `<span class="hnote">New hours (started Oct 4)</span>` : "");
+    + spec + (nCur && ds.every(d => d.cur || d.closed) ? `<span class="hnote">Current hours this week. New hours start ${swLabel(st)}.</span>` : nCur ? `<span class="hnote">${(() => { const ix = ds.map((d,i) => d.cur ? i : -1).filter(i => i >= 0); return ix.length > 1 ? DAYS[ix[0]] + " to " + DAYS[ix[ix.length-1]] : DAYS[ix[0]]; })()} on current hours. ${swLabel(st)} is the first day of the new hours.</span>` : DATA[st].cur ? `<span class="hnote">New hours (started ${shortDate(DATA[st].switchOn)})</span>` : "");
   let hmin=24, hmax=0; openDays(st).forEach(d => { hmin = Math.min(hmin,d.open); hmax = Math.max(hmax,d.close); });
   let html = `<thead><tr><th></th>${DAYS.map((d,di) => dayHead(st, di)).join("")}</tr></thead><tbody>`;
   for (let h=hmin; h<hmax; h++){
@@ -1024,7 +1027,7 @@ function renderStatus(){
   const ws = new Set(); for (let i=-8; i<=8; i++) ws.add(addDays(thisW, 7*i)); ws.add(S.week);
   Object.keys(SAVED).forEach(kk => { const [s2, w] = kk.split("|"); if (s2 === st) ws.add(w); });
   const mark = {posted:"✓ Posted", draft:"✎ Draft, not posted", none:"Not started"};
-  $("weekSel").innerHTML = [...ws].sort().map(w => { const stt = weekState(st, w); const tag = w === thisW ? " (this week)" : ""; const sw = (DATA[st].cur && addDays(w,6) === DATA[st].switchOn ? " · new hours start Sun" : "") + [0,1,2,3,4,5,6].map(di => { const iso = addDays(w, di), c = closedOn(iso), t = tentpoleNamed(iso); return c ? " · closed " + c : t ? " · " + t.name : ""; }).join("");
+  $("weekSel").innerHTML = [...ws].sort().map(w => { const stt = weekState(st, w); const tag = w === thisW ? " (this week)" : ""; const sw = (DATA[st].cur && DATA[st].switchOn > w && DATA[st].switchOn <= addDays(w,6) ? " · new hours start " + swLabel(st).split(",")[0].slice(0,3) : "") + [0,1,2,3,4,5,6].map(di => { const iso = addDays(w, di), c = closedOn(iso), t = tentpoleNamed(iso); return c ? " · closed " + c : t ? " · " + t.name : ""; }).join("");
     return `<option value="${w}" ${w===S.week?"selected":""}>${weekLabel(w)}${tag} · ${mark[stt]}${sw}</option>`; }).join("");
   $("weekSel").className = "weeksel ws-" + weekState(st, S.week);
   /* Same week list in the header, under Your store. */
@@ -1061,7 +1064,7 @@ function renderNow0(n){
   const open = !d.closed && n.t >= d.open && n.t < d.close;
   if (d.closed){ $("nowHead").innerHTML = `<b>${esc(st)}</b> · ${DAYFULL[n.di]}, ${shortDate(n.iso)} · <span class="pill">Closed for ${esc(d.name)}</span>`; $("nowBody").innerHTML = `<div class="tip info">The store is closed today for ${esc(d.name)}.</div>`; return; }
   $("nowHead").innerHTML = `<b>${esc(st)}</b> · ${DAYFULL[n.di]}, ${shortDate(n.iso)} · ${clockNow(n.t)} ${tzLabel(st)} · ` + (open ? `<span class="pill shape-both">Open until ${fmt(d.close)}</span>` : (n.t < d.open ? `<span class="pill">Opens at ${fmt(d.open)}</span>` : `<span class="pill">Closed for the day</span>`))
-    + (d.cur ? ` <span class="note">Current hours until Oct 4</span>` : "") + (d.special ? ` <span class="pill tp">${esc(d.name)} hours</span>` : "");
+    + (d.cur ? ` <span class="note">New hours start ${shortDate(DATA[st].switchOn)}</span>` : "") + (d.special ? ` <span class="pill tp">${esc(d.name)} hours</span>` : "");
   if (!r){ $("nowBody").innerHTML = saved
       ? `<div class="pbar draft" style="margin:0"><div><b>This week's schedule is still a draft</b><span>A leader has started the week of ${weekLabel(n.week)} but hasn't posted it. Post it in Build the week and this panel shows who's in the building.</span></div></div>`
       : `<div class="pbar draft" style="margin:0"><div><b>No schedule posted for this week</b><span>Nothing has been posted for the week of ${weekLabel(n.week)}. Once a leader posts it, this panel shows who's in the building right now.</span></div></div>`; return; }
